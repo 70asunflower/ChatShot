@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "ChatShot",
+  "version": "1.0.0",
+  "description": "Capture AI chat responses as screenshots and stitch them for easy sharing",
+  "permissions": ["activeTab"],
+  "icons": {
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://chat.deepseek.com/*"],
+      "js": ["lib/html2canvas.min.js", "content.js"],
+      "css": ["content.css"]
+    }
+  ]
+}
