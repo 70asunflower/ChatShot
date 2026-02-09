@@ -266,7 +266,7 @@
 /* Block overlay */
 .ds-block-overlay {
   position: absolute;
-  z-index: 9999;
+  z-index: 999;
   border: 2px dashed rgba(156, 163, 175, 0.5);
   border-radius: 8px;
   cursor: pointer;
@@ -306,11 +306,44 @@
   background: rgba(251, 146, 60, 0.25) !important;
 }
 
-/* Merge button active state */
-#ds-merge-blocks.active {
-  background: rgba(251, 146, 60, 0.3) !important;
-  border-color: rgba(251, 146, 60, 0.8) !important;
+/* Merge button default state */
+#ds-merge-blocks {
+  background: rgba(251, 146, 60, 0.15) !important;
+  border: 1px solid rgba(251, 146, 60, 0.5) !important;
   color: #fb923c !important;
+}
+
+#ds-merge-blocks:hover {
+  background: rgba(251, 146, 60, 0.25) !important;
+  border-color: rgba(251, 146, 60, 0.7) !important;
+}
+
+/* Merge button active state (2+ blocks selected) */
+#ds-merge-blocks.active {
+  background: rgba(251, 146, 60, 0.4) !important;
+  border-color: rgba(251, 146, 60, 1) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(251, 146, 60, 0.4);
+}
+
+/* Unmerge button default state */
+#ds-unmerge-block {
+  background: rgba(147, 197, 253, 0.15) !important;
+  border: 1px solid rgba(147, 197, 253, 0.5) !important;
+  color: #93c5fd !important;
+}
+
+#ds-unmerge-block:hover {
+  background: rgba(147, 197, 253, 0.25) !important;
+  border-color: rgba(147, 197, 253, 0.7) !important;
+}
+
+/* Unmerge button active state (merged block shift-selected) */
+#ds-unmerge-block.active {
+  background: rgba(59, 130, 246, 0.4) !important;
+  border-color: rgba(59, 130, 246, 1) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
 /* Block checkbox */

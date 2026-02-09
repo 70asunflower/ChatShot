@@ -136,6 +136,231 @@
         const firstText = respElement.textContent?.trim().slice(0, 20);
         return firstText ? firstText + '...' : `Response ${index + 1}`;
       }
+    },
+    gemini: {
+      name: 'gemini',
+      host: 'gemini.google.com',
+      responseSelector: '.markdown.markdown-main-panel',
+      getBlocks: (container) => {
+        const blocks = [];
+        let currentBlock = null;
+        const children = Array.from(container.children);
+        for (const child of children) {
+          const tagName = child.tagName.toLowerCase();
+          // h2, h3, hr as section dividers
+          if (tagName === 'h2' || tagName === 'h3' || tagName === 'hr') {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            if (tagName === 'hr') {
+              currentBlock = null; // hr is just a divider, don't include it
+            } else {
+              currentBlock = { type: 'section', elements: [child] };
+            }
+          } else if (currentBlock) {
+            currentBlock.elements.push(child);
+          } else {
+            currentBlock = { type: 'default', elements: [child] };
+          }
+        }
+        if (currentBlock && currentBlock.elements.length > 0) {
+          blocks.push(currentBlock);
+        }
+        return blocks;
+      },
+      getResponseTitle: (respElement, index) => {
+        // Look for the user query in the conversation
+        const conversationTurn = respElement.closest('conversation-turn, [data-turn-id]');
+        if (conversationTurn) {
+          const prevTurn = conversationTurn.previousElementSibling;
+          if (prevTurn) {
+            const userQuery = prevTurn.querySelector('.query-text, [data-user-query]');
+            if (userQuery) {
+              const text = userQuery.textContent?.trim();
+              if (text && text.length > 0) {
+                return text.slice(0, 20) + (text.length > 20 ? '...' : '');
+              }
+            }
+          }
+        }
+        const firstText = respElement.textContent?.trim().slice(0, 20);
+        return firstText ? firstText + '...' : `Response ${index + 1}`;
+      }
+    },
+    doubao: {
+      name: 'doubao',
+      host: 'www.doubao.com',
+      responseSelector: '[data-testid="message_text_content"].flow-markdown-body',
+      getBlocks: (container) => {
+        const blocks = [];
+        let currentBlock = null;
+        const children = Array.from(container.children);
+        for (const child of children) {
+          const tagName = child.tagName.toLowerCase();
+          // Skip line break divs
+          if (child.classList.contains('md-box-line-break')) continue;
+          
+          // h2, h3, hr as section dividers
+          if (tagName === 'h2' || tagName === 'h3' || tagName === 'hr') {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            if (tagName === 'hr') {
+              currentBlock = null;
+            } else {
+              currentBlock = { type: 'section', elements: [child] };
+            }
+          } else if (currentBlock) {
+            currentBlock.elements.push(child);
+          } else {
+            currentBlock = { type: 'default', elements: [child] };
+          }
+        }
+        if (currentBlock && currentBlock.elements.length > 0) {
+          blocks.push(currentBlock);
+        }
+        return blocks;
+      },
+      getResponseTitle: (respElement, index) => {
+        const firstText = respElement.textContent?.trim().slice(0, 20);
+        return firstText ? firstText + '...' : `Response ${index + 1}`;
+      }
+    },
+    kimi: {
+      name: 'kimi',
+      host: 'www.kimi.com',
+      responseSelector: '.markdown',
+      getBlocks: (container) => {
+        const blocks = [];
+        let currentBlock = null;
+        const children = Array.from(container.children);
+        for (const child of children) {
+          const tagName = child.tagName.toLowerCase();
+          
+          // h2, h3, h4 as section dividers
+          if (tagName === 'h2' || tagName === 'h3' || tagName === 'h4') {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            currentBlock = { type: 'section', elements: [child] };
+          } else if (currentBlock) {
+            currentBlock.elements.push(child);
+          } else {
+            currentBlock = { type: 'default', elements: [child] };
+          }
+        }
+        if (currentBlock && currentBlock.elements.length > 0) {
+          blocks.push(currentBlock);
+        }
+        return blocks;
+      },
+      getResponseTitle: (respElement, index) => {
+        const firstText = respElement.textContent?.trim().slice(0, 20);
+        return firstText ? firstText + '...' : `Response ${index + 1}`;
+      }
+    },
+    qianwen: {
+      name: 'qianwen',
+      host: 'www.qianwen.com',
+      responseSelector: '.qk-markdown',
+      getBlocks: (container) => {
+        const blocks = [];
+        let currentBlock = null;
+        const children = Array.from(container.children);
+        for (const child of children) {
+          const tagName = child.tagName.toLowerCase();
+          
+          // hr as section divider, h2/h3 as section headers
+          if (tagName === 'hr' || child.classList.contains('qk-md-hr')) {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            currentBlock = null;
+            continue;
+          }
+          
+          if (tagName === 'h2' || tagName === 'h3' || child.classList.contains('qk-md-head')) {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            currentBlock = { type: 'section', elements: [child] };
+          } else if (currentBlock) {
+            currentBlock.elements.push(child);
+          } else {
+            currentBlock = { type: 'default', elements: [child] };
+          }
+        }
+        if (currentBlock && currentBlock.elements.length > 0) {
+          blocks.push(currentBlock);
+        }
+        return blocks;
+      },
+      getResponseTitle: (respElement, index) => {
+        const firstText = respElement.textContent?.trim().slice(0, 20);
+        return firstText ? firstText + '...' : `Response ${index + 1}`;
+      }
+    },
+    chatglm: {
+      name: 'chatglm',
+      host: 'chatglm.cn',
+      responseSelector: '.answer-content-wrap',
+      getBlocks: (container) => {
+        const blocks = [];
+        let currentBlock = null;
+        
+        // Collect all content elements: markdown-body divs and code-no-artifacts (mermaid)
+        const contentElements = container.querySelectorAll('.markdown-body.md-body, .code-no-artifacts');
+        
+        for (const contentEl of contentElements) {
+          // For code blocks (mermaid), treat as a single block
+          if (contentEl.classList.contains('code-no-artifacts')) {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+              currentBlock = null;
+            }
+            blocks.push({ type: 'code', elements: [contentEl] });
+            continue;
+          }
+          
+          // For markdown content, parse children
+          const children = Array.from(contentEl.children);
+          for (const child of children) {
+            const tagName = child.tagName.toLowerCase();
+            
+            // hr as section divider
+            if (tagName === 'hr') {
+              if (currentBlock && currentBlock.elements.length > 0) {
+                blocks.push(currentBlock);
+              }
+              currentBlock = null;
+              continue;
+            }
+            
+            // h3/h4 as section headers
+            if (tagName === 'h3' || tagName === 'h4') {
+              if (currentBlock && currentBlock.elements.length > 0) {
+                blocks.push(currentBlock);
+              }
+              currentBlock = { type: 'section', elements: [child] };
+            } else if (currentBlock) {
+              currentBlock.elements.push(child);
+            } else {
+              currentBlock = { type: 'default', elements: [child] };
+            }
+          }
+        }
+        
+        if (currentBlock && currentBlock.elements.length > 0) {
+          blocks.push(currentBlock);
+        }
+        return blocks;
+      },
+      getResponseTitle: (respElement, index) => {
+        const heading = respElement.querySelector('h3, h4');
+        if (heading) return heading.textContent?.trim().slice(0, 30) || `Response ${index + 1}`;
+        const firstText = respElement.textContent?.trim().slice(0, 20);
+        return firstText ? firstText + '...' : `Response ${index + 1}`;
+      }
     }
   };
 
@@ -193,6 +418,7 @@
       <button id="ds-select-all">All</button>
       <button id="ds-select-none">None</button>
       <button id="ds-merge-blocks" title="Shift+click blocks to select, then merge">Merge</button>
+      <button id="ds-unmerge-block" title="Unmerge selected merged block">Unmerge</button>
       <button id="ds-confirm-capture">Capture</button>
       <button id="ds-cancel-selection">Cancel</button>
     `;
@@ -207,6 +433,7 @@
     document.getElementById('ds-select-all').addEventListener('click', selectAllBlocks);
     document.getElementById('ds-select-none').addEventListener('click', selectNoBlocks);
     document.getElementById('ds-merge-blocks').addEventListener('click', mergeSelectedBlocks);
+    document.getElementById('ds-unmerge-block').addEventListener('click', unmergeSelectedBlock);
 
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.ds-response-selector')) {
@@ -374,6 +601,7 @@
         overlay?.classList.add('merge-selected');
       }
       updateMergeCount();
+      updateUnmergeState();
     } else {
       // Normal click: toggle capture selection
       if (selectedBlockIndices.has(index)) {
@@ -422,8 +650,9 @@
       mergedElements.push(...detectedBlocks[idx].elements);
     });
     
-    // Create merged block
-    const mergedBlock = { type: 'merged', elements: mergedElements };
+    // Create merged block with original blocks stored for unmerge
+    const originalBlocks = indices.map(idx => detectedBlocks[idx]);
+    const mergedBlock = { type: 'merged', elements: mergedElements, originalBlocks: originalBlocks };
     
     // Replace in detectedBlocks array
     detectedBlocks.splice(firstIdx, indices.length, mergedBlock);
@@ -456,6 +685,75 @@
     updateMergeCount();
     
     showStatus(`Merged ${indices.length} blocks`, 'success');
+  }
+
+  // Unmerge a selected merged block
+  function unmergeSelectedBlock() {
+    // Find a merged block in mergeSelectedIndices
+    const mergeIdx = Array.from(mergeSelectedIndices).find(idx => 
+      detectedBlocks[idx] && detectedBlocks[idx].type === 'merged' && detectedBlocks[idx].originalBlocks
+    );
+    
+    if (mergeIdx === undefined) {
+      showStatus('Shift+click a merged block to unmerge', 'error');
+      return;
+    }
+    
+    const mergedBlock = detectedBlocks[mergeIdx];
+    const originalBlocks = mergedBlock.originalBlocks;
+    const numOriginal = originalBlocks.length;
+    
+    // Replace merged block with original blocks
+    detectedBlocks.splice(mergeIdx, 1, ...originalBlocks);
+    
+    // Update selectedBlockIndices to account for added blocks
+    const newSelected = new Set();
+    selectedBlockIndices.forEach(idx => {
+      if (idx < mergeIdx) {
+        newSelected.add(idx);
+      } else if (idx === mergeIdx) {
+        // Select all restored blocks
+        for (let i = 0; i < numOriginal; i++) {
+          newSelected.add(mergeIdx + i);
+        }
+      } else {
+        newSelected.add(idx + numOriginal - 1);
+      }
+    });
+    selectedBlockIndices = newSelected;
+    mergeSelectedIndices.clear();
+    
+    // Rebuild overlays
+    document.querySelectorAll('.ds-block-overlay').forEach(el => el.remove());
+    detectedBlocks.forEach((block, i) => {
+      addBlockOverlay(block, i);
+      if (selectedBlockIndices.has(i)) {
+        document.querySelector(`.ds-block-overlay[data-index="${i}"]`)?.classList.add('selected');
+      }
+    });
+    updateOverlayPositions();
+    updateSelectionCount();
+    updateMergeCount();
+    updateUnmergeState();
+    
+    showStatus(`Unmerged into ${numOriginal} blocks`, 'success');
+  }
+
+  // Update unmerge button state
+  function updateUnmergeState() {
+    const btn = document.getElementById('ds-unmerge-block');
+    if (!btn) return;
+    
+    // Check if any merge-selected block is a merged block
+    const hasMergedBlock = Array.from(mergeSelectedIndices).some(idx => 
+      detectedBlocks[idx] && detectedBlocks[idx].type === 'merged' && detectedBlocks[idx].originalBlocks
+    );
+    
+    if (hasMergedBlock) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
   }
 
   function selectAllBlocks() {
@@ -513,7 +811,16 @@
     statusEl.parentElement.appendChild(cancelBtn);
 
     try {
-      showStatus(`Capturing ${blocks.length} blocks...`, 'info');
+      showStatus('Preparing...', 'info');
+      
+      // Defer heavy computation to allow UI to update first
+      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+
+      showStatus(`Calculating layout...`, 'info');
+      // Calculate max width of all blocks for uniform output
+      const maxWidth = getBlocksMaxWidth(blocks);
+      
+      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
       const canvases = [];
       for (let i = 0; i < blocks.length; i++) {
@@ -522,7 +829,11 @@
           return;
         }
         showStatus(`Capturing (${i + 1}/${blocks.length})...`, 'info');
-        const canvas = await captureBlock(blocks[i]);
+        
+        // Allow UI to update between captures
+        await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+        
+        const canvas = await captureBlock(blocks[i], maxWidth);
         canvases.push(canvas);
       }
 
@@ -602,7 +913,20 @@
     return luminance < 0.5;
   }
 
-  async function captureBlock(block) {
+  // Get max width of all blocks for unified capture
+  function getBlocksMaxWidth(blocks) {
+    let maxWidth = 0;
+    for (const block of blocks) {
+      for (const el of block.elements) {
+        const rect = el.getBoundingClientRect();
+        maxWidth = Math.max(maxWidth, rect.width);
+      }
+    }
+    // Add padding and ensure minimum width
+    return Math.max(maxWidth + 32, 400); // 32 for padding, min 400px
+  }
+
+  async function captureBlock(block, targetWidth = 800) {
     if (!detectedBgColor) detectedBgColor = detectThemeBackground();
     const bgColor = detectedBgColor;
 
@@ -610,7 +934,8 @@
     tempContainer.style.cssText = `
       position: absolute; left: -9999px; top: 0;
       background: ${bgColor}; padding: 16px;
-      width: fit-content; max-width: 800px;
+      width: ${targetWidth}px; min-width: ${targetWidth}px;
+      text-align: left;
     `;
 
     for (const el of block.elements) {
@@ -624,7 +949,13 @@
 
     try {
       return await html2canvas(tempContainer, {
-        backgroundColor: bgColor, scale: 2, useCORS: true, logging: false
+        backgroundColor: bgColor,
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        foreignObjectRendering: false,
+        removeContainer: true,
+        logging: false
       });
     } finally {
       document.body.removeChild(tempContainer);
@@ -634,7 +965,7 @@
   function copyElementStyles(source, target) {
     const style = window.getComputedStyle(source);
     ['color', 'font-family', 'font-size', 'font-weight', 'line-height', 
-     'background-color', 'border', 'padding', 'margin'].forEach(prop => {
+     'background-color', 'border', 'padding', 'margin', 'text-align'].forEach(prop => {
       target.style[prop] = style.getPropertyValue(prop);
     });
     for (let i = 0; i < source.children.length && i < target.children.length; i++) {
@@ -656,9 +987,15 @@
 
   function stitchImagesHorizontal(canvases) {
     if (canvases.length === 0) return null;
+    
+    // Calculate dynamic max row width based on canvas widths
+    const avgWidth = canvases.reduce((sum, c) => sum + c.width, 0) / canvases.length;
+    const dynamicMaxRowWidth = Math.max(CONFIG.maxRowWidth, avgWidth * 3); // At least 3 blocks per row
+    
     const rows = []; let currentRow = []; let currentRowWidth = 0;
     for (const canvas of canvases) {
-      if (currentRowWidth + canvas.width > CONFIG.maxRowWidth && currentRow.length > 0) {
+      // Only break if we have at least 2 items and would exceed max width
+      if (currentRowWidth + canvas.width > dynamicMaxRowWidth && currentRow.length >= 2) {
         rows.push(currentRow); currentRow = []; currentRowWidth = 0;
       }
       currentRow.push(canvas);

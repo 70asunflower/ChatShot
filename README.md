@@ -1,23 +1,28 @@
 # ChatShot
 
-? Capture AI chat responses as beautiful screenshots and stitch them for easy sharing.
+Capture AI chat responses as beautiful screenshots and stitch them for easy sharing.
 
 ![ChatShot Logo](icons/icon128.png)
 
 ## Features
 
-- ? **Block Selection**: Choose which content blocks to capture
-- ?? **Horizontal Stitch**: Arrange blocks side by side
-- ?? **Vertical Stitch**: Stack blocks top to bottom
-- ? **Auto Theme Detection**: Matches dark/light mode
-- ? **Response Selector**: Capture any conversation response
-- ? **Block Merge**: Combine small adjacent blocks (Shift+click + Merge)
+- Block Selection: Choose which content blocks to capture
+- Horizontal Stitch: Arrange blocks side by side
+- Vertical Stitch: Stack blocks top to bottom
+- Auto Theme Detection: Matches dark/light mode
+- Response Selector: Capture any conversation response
+- Block Merge: Combine small adjacent blocks (Shift+click + Merge)
 
 ## Supported Platforms
 
 - [x] DeepSeek (chat.deepseek.com)
 - [x] NotebookLM (notebooklm.google.com)
 - [x] ChatGPT (chatgpt.com)
+- [x] Gemini (gemini.google.com)
+- [x] Doubao (www.doubao.com)
+- [x] Kimi (www.kimi.com)
+- [x] Qianwen (www.qianwen.com)
+- [x] ChatGLM (chatglm.cn)
 - [ ] Claude (coming soon)
 
 ## Installation
@@ -26,7 +31,7 @@
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/ChatShot.git
+   git clone https://github.com/70asunflower/ChatShot.git
    ```
 
 2. Open Chrome and go to `chrome://extensions/`
@@ -42,12 +47,8 @@
 1. Open a chat on a supported platform
 2. Click **H** (horizontal) or **V** (vertical) button
 3. Select/deselect content blocks you want to capture
-4. *(Optional)* **Shift+click** adjacent blocks ¡ú click **Merge** to combine them
+4. *(Optional)* **Shift+click** adjacent blocks then click **Merge** to combine them
 5. Click **Capture** to generate and download the image
-
-## Screenshots
-
-*Coming soon*
 
 ## License
 
