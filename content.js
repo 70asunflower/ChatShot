@@ -10,6 +10,148 @@
     padding: 20
   };
 
+  // LLM Platform Adapters
+  const LLM_ADAPTERS = {
+    deepseek: {
+      name: 'deepseek',
+      host: 'chat.deepseek.com',
+      responseSelector: '.ds-markdown',
+      getBlocks: (container) => {
+        const blocks = [];
+        let currentBlock = null;
+        const children = Array.from(container.children);
+        for (const child of children) {
+          const tagName = child.tagName.toLowerCase();
+          if (tagName === 'h2' || tagName === 'h3') {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            currentBlock = { type: 'section', elements: [child] };
+          } else if (currentBlock) {
+            currentBlock.elements.push(child);
+          } else {
+            currentBlock = { type: 'default', elements: [child] };
+          }
+        }
+        if (currentBlock && currentBlock.elements.length > 0) {
+          blocks.push(currentBlock);
+        }
+        return blocks;
+      },
+      getResponseTitle: (respElement, index) => {
+        let parent = respElement.closest('[class*="message"]') || respElement.parentElement;
+        let prevSibling = parent?.previousElementSibling;
+        if (prevSibling) {
+          const userText = prevSibling.textContent?.trim();
+          if (userText && userText.length > 0) {
+            return userText.slice(0, 20) + (userText.length > 20 ? '...' : '');
+          }
+        }
+        const firstText = respElement.textContent?.trim().slice(0, 20);
+        return firstText ? firstText + '...' : `Response ${index + 1}`;
+      }
+    },
+    notebooklm: {
+      name: 'notebooklm',
+      host: 'notebooklm.google.com',
+      responseSelector: '.to-user-message-card-content .message-text-content',
+      getBlocks: (container) => {
+        const blocks = [];
+        const paragraphs = container.querySelectorAll('labs-tailwind-structural-element-view-v2');
+        paragraphs.forEach((p, i) => {
+          const isHeading = p.querySelector('.paragraph.heading3');
+          if (isHeading) {
+            blocks.push({ type: 'section', elements: [p], isHeading: true });
+          } else {
+            // Group consecutive non-heading paragraphs
+            const lastBlock = blocks[blocks.length - 1];
+            if (lastBlock && !lastBlock.isHeading && lastBlock.type === 'paragraph') {
+              lastBlock.elements.push(p);
+            } else {
+              blocks.push({ type: 'paragraph', elements: [p], isHeading: false });
+            }
+          }
+        });
+        return blocks;
+      },
+      getResponseTitle: (respElement, index) => {
+        const messagePair = respElement.closest('.chat-message-pair');
+        if (messagePair) {
+          const userMessage = messagePair.querySelector('.from-user-container .message-text-content');
+          if (userMessage) {
+            const text = userMessage.textContent?.trim();
+            if (text && text.length > 0) {
+              return text.slice(0, 20) + (text.length > 20 ? '...' : '');
+            }
+          }
+        }
+        const firstText = respElement.textContent?.trim().slice(0, 20);
+        return firstText ? firstText + '...' : `Response ${index + 1}`;
+      }
+    },
+    chatgpt: {
+      name: 'chatgpt',
+      host: 'chatgpt.com',
+      responseSelector: '[data-message-author-role="assistant"] .markdown.prose',
+      getBlocks: (container) => {
+        const blocks = [];
+        let currentBlock = null;
+        const children = Array.from(container.children);
+        for (const child of children) {
+          const tagName = child.tagName.toLowerCase();
+          // Treat h2, h3, ol, ul as section starters
+          if (tagName === 'h2' || tagName === 'h3' || tagName === 'ol' || tagName === 'ul') {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            currentBlock = { type: 'section', elements: [child] };
+          } else if (currentBlock) {
+            currentBlock.elements.push(child);
+          } else {
+            currentBlock = { type: 'default', elements: [child] };
+          }
+        }
+        if (currentBlock && currentBlock.elements.length > 0) {
+          blocks.push(currentBlock);
+        }
+        return blocks;
+      },
+      getResponseTitle: (respElement, index) => {
+        // Find the parent message container and look for the user message
+        const messageContainer = respElement.closest('[data-message-author-role="assistant"]');
+        if (messageContainer) {
+          // Look for previous sibling with user role
+          let prevEl = messageContainer.parentElement?.parentElement?.previousElementSibling;
+          while (prevEl) {
+            const userMsg = prevEl.querySelector('[data-message-author-role="user"]');
+            if (userMsg) {
+              const text = userMsg.textContent?.trim();
+              if (text && text.length > 0) {
+                return text.slice(0, 20) + (text.length > 20 ? '...' : '');
+              }
+            }
+            prevEl = prevEl.previousElementSibling;
+          }
+        }
+        const firstText = respElement.textContent?.trim().slice(0, 20);
+        return firstText ? firstText + '...' : `Response ${index + 1}`;
+      }
+    }
+  };
+
+  // Detect current platform
+  function getCurrentPlatform() {
+    const host = window.location.host;
+    for (const [key, adapter] of Object.entries(LLM_ADAPTERS)) {
+      if (host.includes(adapter.host)) {
+        return adapter;
+      }
+    }
+    return LLM_ADAPTERS.deepseek; // fallback
+  }
+
+  let currentAdapter = null;
+
   // State variables
   let selectedResponseIndex = -1;
   let detectedBgColor = null;
@@ -20,10 +162,12 @@
   let currentCaptureMode = 'horizontal';
   let detectedBlocks = [];
   let selectedBlockIndices = new Set();
+  let mergeSelectedIndices = new Set(); // For merge multi-select
 
   // Initialize
   function init() {
     if (document.querySelector('.ds-screenshot-btn')) return;
+    currentAdapter = getCurrentPlatform();
 
     const container = document.createElement('div');
     container.className = 'ds-screenshot-btn';
@@ -48,6 +192,7 @@
       <span id="ds-selection-count">Selected: 0/0</span>
       <button id="ds-select-all">All</button>
       <button id="ds-select-none">None</button>
+      <button id="ds-merge-blocks" title="Shift+click blocks to select, then merge">Merge</button>
       <button id="ds-confirm-capture">Capture</button>
       <button id="ds-cancel-selection">Cancel</button>
     `;
@@ -61,10 +206,11 @@
     document.getElementById('ds-cancel-selection').addEventListener('click', exitSelectionMode);
     document.getElementById('ds-select-all').addEventListener('click', selectAllBlocks);
     document.getElementById('ds-select-none').addEventListener('click', selectNoBlocks);
+    document.getElementById('ds-merge-blocks').addEventListener('click', mergeSelectedBlocks);
 
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.ds-response-selector')) {
-        document.getElementById('ds-response-list').classList.remove('show');
+        document.getElementById('ds-response-list')?.classList.remove('show');
       }
     });
 
@@ -81,7 +227,7 @@
       return;
     }
 
-    const responses = document.querySelectorAll('.ds-markdown');
+    const responses = document.querySelectorAll(currentAdapter.responseSelector);
     listEl.innerHTML = '';
 
     const latestItem = document.createElement('div');
@@ -103,17 +249,7 @@
   }
 
   function getResponseTitle(respElement, index) {
-    let parent = respElement.closest('[class*="message"]') || respElement.parentElement;
-    let prevSibling = parent?.previousElementSibling;
-    
-    if (prevSibling) {
-      const userText = prevSibling.textContent?.trim();
-      if (userText && userText.length > 0) {
-        return userText.slice(0, 20) + (userText.length > 20 ? '...' : '');
-      }
-    }
-    const firstText = respElement.textContent?.trim().slice(0, 20);
-    return firstText ? firstText + '...' : `Response ${index + 1}`;
+    return currentAdapter.getResponseTitle(respElement, index);
   }
 
   function selectResponse(index, title) {
@@ -138,7 +274,7 @@
 
     const response = findSelectedResponse();
     if (!response) {
-      showStatus('No DeepSeek response found', 'error');
+      showStatus('No AI response found', 'error');
       return;
     }
 
@@ -200,7 +336,7 @@
     number.textContent = index + 1;
     overlay.appendChild(number);
 
-    overlay.addEventListener('click', () => toggleBlockSelection(index));
+    overlay.addEventListener('click', (e) => toggleBlockSelection(index, e));
     document.body.appendChild(overlay);
   }
 
@@ -223,17 +359,103 @@
     });
   }
 
-  // Toggle block selection
-  function toggleBlockSelection(index) {
+  // Toggle block selection (with Shift support for merge)
+  function toggleBlockSelection(index, event) {
     const overlay = document.querySelector(`.ds-block-overlay[data-index="${index}"]`);
-    if (selectedBlockIndices.has(index)) {
-      selectedBlockIndices.delete(index);
-      overlay?.classList.remove('selected');
+    const isShiftClick = event?.shiftKey;
+    
+    if (isShiftClick) {
+      // Shift+click: toggle merge selection (visual highlight)
+      if (mergeSelectedIndices.has(index)) {
+        mergeSelectedIndices.delete(index);
+        overlay?.classList.remove('merge-selected');
+      } else {
+        mergeSelectedIndices.add(index);
+        overlay?.classList.add('merge-selected');
+      }
+      updateMergeCount();
     } else {
-      selectedBlockIndices.add(index);
-      overlay?.classList.add('selected');
+      // Normal click: toggle capture selection
+      if (selectedBlockIndices.has(index)) {
+        selectedBlockIndices.delete(index);
+        overlay?.classList.remove('selected');
+      } else {
+        selectedBlockIndices.add(index);
+        overlay?.classList.add('selected');
+      }
+      updateSelectionCount();
     }
+  }
+
+  function updateMergeCount() {
+    const btn = document.getElementById('ds-merge-blocks');
+    if (mergeSelectedIndices.size >= 2) {
+      btn.textContent = `Merge (${mergeSelectedIndices.size})`;
+      btn.classList.add('active');
+    } else {
+      btn.textContent = 'Merge';
+      btn.classList.remove('active');
+    }
+  }
+
+  // Merge selected blocks into one
+  function mergeSelectedBlocks() {
+    if (mergeSelectedIndices.size < 2) {
+      showStatus('Shift+click 2+ adjacent blocks to merge', 'error');
+      return;
+    }
+    
+    const indices = Array.from(mergeSelectedIndices).sort((a, b) => a - b);
+    
+    // Check if indices are consecutive
+    for (let i = 1; i < indices.length; i++) {
+      if (indices[i] !== indices[i-1] + 1) {
+        showStatus('Can only merge adjacent blocks', 'error');
+        return;
+      }
+    }
+    
+    // Merge blocks
+    const firstIdx = indices[0];
+    const mergedElements = [];
+    indices.forEach(idx => {
+      mergedElements.push(...detectedBlocks[idx].elements);
+    });
+    
+    // Create merged block
+    const mergedBlock = { type: 'merged', elements: mergedElements };
+    
+    // Replace in detectedBlocks array
+    detectedBlocks.splice(firstIdx, indices.length, mergedBlock);
+    
+    // Update selectedBlockIndices to account for removed blocks
+    const newSelected = new Set();
+    selectedBlockIndices.forEach(idx => {
+      if (idx < firstIdx) {
+        newSelected.add(idx);
+      } else if (idx >= firstIdx + indices.length) {
+        newSelected.add(idx - indices.length + 1);
+      } else {
+        // Was one of merged blocks, select the new merged block
+        newSelected.add(firstIdx);
+      }
+    });
+    selectedBlockIndices = newSelected;
+    mergeSelectedIndices.clear();
+    
+    // Rebuild overlays
+    document.querySelectorAll('.ds-block-overlay').forEach(el => el.remove());
+    detectedBlocks.forEach((block, i) => {
+      addBlockOverlay(block, i);
+      if (selectedBlockIndices.has(i)) {
+        document.querySelector(`.ds-block-overlay[data-index="${i}"]`)?.classList.add('selected');
+      }
+    });
+    updateOverlayPositions();
     updateSelectionCount();
+    updateMergeCount();
+    
+    showStatus(`Merged ${indices.length} blocks`, 'success');
   }
 
   function selectAllBlocks() {
@@ -330,7 +552,7 @@
   }
 
   function findSelectedResponse() {
-    const responses = document.querySelectorAll('.ds-markdown');
+    const responses = document.querySelectorAll(currentAdapter.responseSelector);
     if (responses.length === 0) return null;
     if (selectedResponseIndex === -1) return responses[responses.length - 1];
     if (selectedResponseIndex >= 0 && selectedResponseIndex < responses.length) {
@@ -340,39 +562,36 @@
   }
 
   function detectBlocks(container) {
-    const blocks = [];
-    let currentBlock = null;
-    const children = Array.from(container.children);
-
-    for (const child of children) {
-      const tagName = child.tagName.toLowerCase();
-      if (tagName === 'h2' || tagName === 'h3') {
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        currentBlock = { type: 'section', elements: [child] };
-      } else if (currentBlock) {
-        currentBlock.elements.push(child);
-      } else {
-        currentBlock = { type: 'default', elements: [child] };
-      }
-    }
-    if (currentBlock && currentBlock.elements.length > 0) {
-      blocks.push(currentBlock);
-    }
-    return blocks;
+    return currentAdapter.getBlocks(container);
   }
 
   function detectThemeBackground() {
     const html = document.documentElement;
     const body = document.body;
-    const isDarkMode = 
+    
+    // Check explicit dark mode classes/attributes
+    const hasDarkClass = 
       html.classList.contains('dark') || body.classList.contains('dark') ||
       html.classList.contains('dark-mode') || body.classList.contains('dark-mode') ||
       html.getAttribute('data-theme') === 'dark' || body.getAttribute('data-theme') === 'dark' ||
-      document.querySelector('[class*="dark"]') !== null ||
-      isColorDark(window.getComputedStyle(body).backgroundColor);
-    return isDarkMode ? '#1e1e1e' : '#ffffff';
+      html.getAttribute('data-color-mode') === 'dark';
+    
+    if (hasDarkClass) return '#1e1e1e';
+    
+    // Check computed background color of body
+    const bodyBg = window.getComputedStyle(body).backgroundColor;
+    if (isColorDark(bodyBg)) return '#1e1e1e';
+    
+    // Check main content area background
+    const mainContent = document.querySelector('main') || document.querySelector('[role="main"]');
+    if (mainContent) {
+      const mainBg = window.getComputedStyle(mainContent).backgroundColor;
+      if (mainBg && mainBg !== 'transparent' && mainBg !== 'rgba(0, 0, 0, 0)') {
+        return isColorDark(mainBg) ? '#1e1e1e' : '#ffffff';
+      }
+    }
+    
+    return '#ffffff'; // Default to light
   }
 
   function isColorDark(color) {
@@ -510,7 +729,8 @@
     const ts = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') +
       String(now.getDate()).padStart(2,'0') + '_' + String(now.getHours()).padStart(2,'0') +
       String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
-    const filename = `deepseek_${ts}.png`;
+    const platformName = currentAdapter?.name || 'chatshot';
+    const filename = `${platformName}_${ts}.png`;
     try {
       const a = document.createElement('a');
       a.href = canvas.toDataURL('image/png');

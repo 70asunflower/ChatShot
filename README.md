@@ -11,11 +11,13 @@
 - ?? **Vertical Stitch**: Stack blocks top to bottom
 - ? **Auto Theme Detection**: Matches dark/light mode
 - ? **Response Selector**: Capture any conversation response
+- ? **Block Merge**: Combine small adjacent blocks (Shift+click + Merge)
 
 ## Supported Platforms
 
 - [x] DeepSeek (chat.deepseek.com)
-- [ ] ChatGPT (coming soon)
+- [x] NotebookLM (notebooklm.google.com)
+- [x] ChatGPT (chatgpt.com)
 - [ ] Claude (coming soon)
 
 ## Installation
@@ -37,10 +39,11 @@
 
 ## Usage
 
-1. Open a chat on a supported platform (e.g., DeepSeek)
+1. Open a chat on a supported platform
 2. Click **H** (horizontal) or **V** (vertical) button
 3. Select/deselect content blocks you want to capture
-4. Click **Capture** to generate and download the image
+4. *(Optional)* **Shift+click** adjacent blocks ¡ú click **Merge** to combine them
+5. Click **Capture** to generate and download the image
 
 ## Screenshots
 

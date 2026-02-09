@@ -9,7 +9,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://chat.deepseek.com/*"],
+      "matches": ["https://chat.deepseek.com/*", "https://notebooklm.google.com/*", "https://chatgpt.com/*"],
       "js": ["lib/html2canvas.min.js", "content.js"],
       "css": ["content.css"]
     }
