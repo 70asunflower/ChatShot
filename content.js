@@ -799,6 +799,7 @@
 
     detectedBgColor = null;
     isCancelled = false;
+    cachedCssText = null; // Reset CSS cache for fresh capture
 
     // Show cancel button during capture
     const statusEl = document.getElementById('ds-status');
@@ -843,11 +844,28 @@
       }
 
       showStatus('Stitching images...', 'info');
+      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      
       const finalCanvas = mode === 'horizontal' 
         ? stitchImagesHorizontal(canvases)
         : stitchImagesVertical(canvases);
 
+      // Free individual block canvases to reduce memory
+      for (const c of canvases) {
+        c.width = 0;
+        c.height = 0;
+      }
+      canvases.length = 0;
+
       downloadImage(finalCanvas);
+      
+      // Free final canvas after download
+      finalCanvas.width = 0;
+      finalCanvas.height = 0;
+      
+      // Clear CSS cache to free memory
+      cachedCssText = null;
+      
       showStatus('Done!', 'success');
 
     } catch (error) {
@@ -926,6 +944,9 @@
     return Math.max(maxWidth + 32, 400); // 32 for padding, min 400px
   }
 
+  // Cache CSS rules to avoid re-collecting for every block
+  let cachedCssText = null;
+
   async function captureBlock(block, targetWidth = 800) {
     if (!detectedBgColor) detectedBgColor = detectThemeBackground();
     const bgColor = detectedBgColor;
@@ -940,7 +961,7 @@
 
     for (const el of block.elements) {
       const clone = el.cloneNode(true);
-      copyElementStyles(el, clone);
+      copyElementStyles(el, clone, 0);
       tempContainer.appendChild(clone);
     }
 
@@ -948,7 +969,7 @@
     copyComputedStyles(tempContainer);
 
     try {
-      return await html2canvas(tempContainer, {
+      const canvas = await html2canvas(tempContainer, {
         backgroundColor: bgColor,
         scale: 2,
         useCORS: true,
@@ -957,31 +978,47 @@
         removeContainer: true,
         logging: false
       });
+      return canvas;
     } finally {
-      document.body.removeChild(tempContainer);
+      tempContainer.remove();
     }
   }
 
-  function copyElementStyles(source, target) {
+  const COPY_STYLE_PROPS = ['color', 'font-family', 'font-size', 'font-weight', 'line-height', 
+     'background-color', 'border', 'padding', 'margin', 'text-align',
+     'display', 'list-style-type', 'white-space'];
+  const MAX_STYLE_DEPTH = 8;
+
+  function copyElementStyles(source, target, depth) {
+    if (depth > MAX_STYLE_DEPTH) return;
     const style = window.getComputedStyle(source);
-    ['color', 'font-family', 'font-size', 'font-weight', 'line-height', 
-     'background-color', 'border', 'padding', 'margin', 'text-align'].forEach(prop => {
+    for (const prop of COPY_STYLE_PROPS) {
       target.style[prop] = style.getPropertyValue(prop);
-    });
-    for (let i = 0; i < source.children.length && i < target.children.length; i++) {
-      copyElementStyles(source.children[i], target.children[i]);
+    }
+    const len = Math.min(source.children.length, target.children.length);
+    for (let i = 0; i < len; i++) {
+      copyElementStyles(source.children[i], target.children[i], depth + 1);
     }
   }
 
   function copyComputedStyles(container) {
-    let cssText = '';
-    try {
-      for (const sheet of document.styleSheets) {
-        try { for (const rule of sheet.cssRules) cssText += rule.cssText + '\n'; } catch (e) {}
-      }
-    } catch (e) {}
+    // Cache CSS text so we only collect rules once per capture session
+    if (cachedCssText === null) {
+      const parts = [];
+      try {
+        for (const sheet of document.styleSheets) {
+          try {
+            const rules = sheet.cssRules;
+            for (let i = 0; i < rules.length; i++) {
+              parts.push(rules[i].cssText);
+            }
+          } catch (e) {}
+        }
+      } catch (e) {}
+      cachedCssText = parts.join('\n');
+    }
     const style = document.createElement('style');
-    style.textContent = cssText;
+    style.textContent = cachedCssText;
     container.insertBefore(style, container.firstChild);
   }
 
