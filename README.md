@@ -23,6 +23,7 @@ Capture AI chat responses as beautiful screenshots and stitch them for easy shar
 - [x] Kimi (www.kimi.com)
 - [x] Qianwen (www.qianwen.com)
 - [x] ChatGLM (chatglm.cn)
+- [x] Copilot (copilot.microsoft.com)
 - [ ] Claude (coming soon)
 
 ## Installation

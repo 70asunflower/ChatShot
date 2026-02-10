@@ -361,6 +361,54 @@
         const firstText = respElement.textContent?.trim().slice(0, 20);
         return firstText ? firstText + '...' : `Response ${index + 1}`;
       }
+    },
+    copilot: {
+      name: 'copilot',
+      host: 'copilot.microsoft.com',
+      responseSelector: '.group\\/ai-message-item',
+      getBlocks: (container) => {
+        const blocks = [];
+        let currentBlock = null;
+        const children = Array.from(container.children);
+        for (const child of children) {
+          const tagName = child.tagName.toLowerCase();
+          
+          // Divider: div with border-b (section separator)
+          const isDivider = tagName === 'div' && (
+            child.classList.contains('pb-6') ||
+            child.className.includes('after:border-b')
+          );
+          if (isDivider) {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            currentBlock = null;
+            continue;
+          }
+          
+          // h1/h2 as section headers
+          if (tagName === 'h1' || tagName === 'h2') {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            currentBlock = { type: 'section', elements: [child] };
+          } else if (currentBlock) {
+            currentBlock.elements.push(child);
+          } else {
+            currentBlock = { type: 'default', elements: [child] };
+          }
+        }
+        if (currentBlock && currentBlock.elements.length > 0) {
+          blocks.push(currentBlock);
+        }
+        return blocks;
+      },
+      getResponseTitle: (respElement, index) => {
+        const heading = respElement.querySelector('h1, h2');
+        if (heading) return heading.textContent?.trim().slice(0, 30) || `Response ${index + 1}`;
+        const firstText = respElement.textContent?.trim().slice(0, 20);
+        return firstText ? firstText + '...' : `Response ${index + 1}`;
+      }
     }
   };
 

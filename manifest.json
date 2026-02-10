@@ -9,7 +9,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://chat.deepseek.com/*", "https://notebooklm.google.com/*", "https://chatgpt.com/*", "https://gemini.google.com/*", "https://www.doubao.com/*", "https://www.kimi.com/*", "https://www.qianwen.com/*", "https://chatglm.cn/*"],
+      "matches": ["https://chat.deepseek.com/*", "https://notebooklm.google.com/*", "https://chatgpt.com/*", "https://gemini.google.com/*", "https://www.doubao.com/*", "https://www.kimi.com/*", "https://www.qianwen.com/*", "https://chatglm.cn/*", "https://copilot.microsoft.com/*"],
       "js": ["lib/html2canvas.min.js", "content.js"],
       "css": ["content.css"]
     }
