@@ -6,31 +6,31 @@ Capture AI chat responses as beautiful screenshots and stitch them for easy shar
 
 ## Features
 
-- ? **Block Detection**: Automatically detects content blocks (paragraphs, code, tables, formulas, etc.)
-- ? **Block Selection**: Choose which blocks to capture, with Select All / None controls
-- ? **Block Merge / Unmerge**: Combine adjacent blocks (Shift+click + Merge) or split them back
-- ?? **Horizontal Stitch (Masonry)**: Waterfall layout ¡ª blocks fill the shortest column, no wasted gaps
-- ? **Vertical Stitch**: Stack blocks top to bottom in a single column
-- ? **Auto Theme Detection**: Matches dark/light mode for seamless screenshots
-- ? **Response Selector**: Pick any conversation response to capture, not just the latest
-- ? **Smart Width Capping**: Code blocks are capped at 1200px to prevent abnormally wide screenshots
-- ? **Performance Optimized**: CSS caching, depth-limited style copy, and canvas memory cleanup
-- ? **Multi-Platform**: Supports 9 major AI chat platforms (see below)
-- ? **Chrome & Edge**: Works on both Chromium-based browsers
+- **Block Detection**: Automatically detects content blocks (paragraphs, code, tables, formulas, etc.)
+- **Block Selection**: Choose which blocks to capture, with Select All / None controls
+- **Block Merge / Unmerge**: Combine adjacent blocks (Shift+click + Merge) or split them back
+- **Horizontal Stitch (Masonry)**: Waterfall layout -- blocks fill the shortest column, no wasted gaps
+- **Vertical Stitch**: Stack blocks top to bottom in a single column
+- **Auto Theme Detection**: Matches dark/light mode for seamless screenshots
+- **Response Selector**: Pick any conversation response to capture, not just the latest
+- **Smart Width Capping**: Code blocks are capped at 1200px to prevent abnormally wide screenshots
+- **Performance Optimized**: CSS caching, depth-limited style copy, and canvas memory cleanup
+- **Multi-Platform**: Supports 9 major AI chat platforms (see below)
+- **Chrome and Edge**: Works on both Chromium-based browsers
 
 ### Masonry vs Row Layout
 
-```
+```text
 Row layout:                  Masonry layout:
-©°©¤©¤©¤©¤©¤©¤©´ ©°©¤©¤©¤©¤©¤©¤©´          ©°©¤©¤©¤©¤©¤©¤©´ ©°©¤©¤©¤©¤©¤©¤©´
-©¦  1   ©¦ ©¦      ©¦          ©¦  1   ©¦ ©¦      ©¦
-©¦      ©¦ ©¦  2   ©¦          ©¦      ©¦ ©¦  2   ©¦
-©¸©¤©¤©¤©¤©¤©¤©¼ ©¦      ©¦          ©¸©¤©¤©¤©¤©¤©¤©¼ ©¦      ©¦
-         ©¸©¤©¤©¤©¤©¤©¤©¼          ©°©¤©¤©¤©¤©¤©¤©´ ©¸©¤©¤©¤©¤©¤©¤©¼
-©¤©¤ gap ©¤©¤ ©¤©¤ gap ©¤©¤        ©¦  3   ©¦ ©°©¤©¤©¤©¤©¤©¤©´
-©°©¤©¤©¤©¤©¤©¤©´                   ©¸©¤©¤©¤©¤©¤©¤©¼ ©¦  4   ©¦
-©¦  3   ©¦                            ©¸©¤©¤©¤©¤©¤©¤©¼
-©¸©¤©¤©¤©¤©¤©¤©¼
++------+ +------+          +------+ +------+
+|  1   | |      |          |  1   | |      |
+|      | |  2   |          |      | |  2   |
++------+ |      |          +------+ |      |
+         +------+          +------+ +------+
+-- gap -- -- gap --        |  3   | +------+
++------+                   +------+ |  4   |
+|  3   |                            +------+
++------+
 ```
 
 ## Supported Platforms
@@ -51,6 +51,7 @@ Row layout:                  Masonry layout:
 ### From Source (Developer Mode)
 
 1. Clone this repository:
+
    ```bash
    git clone https://github.com/70asunflower/ChatShot.git
    ```
