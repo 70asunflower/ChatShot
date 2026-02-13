@@ -14,6 +14,8 @@
   const LLM_ADAPTERS = {
     deepseek: {
       name: 'deepseek',
+      displayName: 'DeepSeek',
+      logo: 'deepseek-color.png',
       host: 'chat.deepseek.com',
       responseSelector: '.ds-markdown',
       getBlocks: (container) => {
@@ -53,6 +55,8 @@
     },
     notebooklm: {
       name: 'notebooklm',
+      displayName: 'NotebookLM',
+      logo: 'gemini-color.png',
       host: 'notebooklm.google.com',
       responseSelector: '.to-user-message-card-content .message-text-content',
       getBlocks: (container) => {
@@ -91,6 +95,8 @@
     },
     chatgpt: {
       name: 'chatgpt',
+      displayName: 'ChatGPT',
+      logo: 'openai.png',
       host: 'chatgpt.com',
       responseSelector: '[data-message-author-role="assistant"] .markdown.prose',
       getBlocks: (container) => {
@@ -139,6 +145,8 @@
     },
     gemini: {
       name: 'gemini',
+      displayName: 'Gemini',
+      logo: 'gemini-color.png',
       host: 'gemini.google.com',
       responseSelector: '.markdown.markdown-main-panel',
       getBlocks: (container) => {
@@ -189,6 +197,8 @@
     },
     doubao: {
       name: 'doubao',
+      displayName: 'Doubao',
+      logo: 'doubao-color.png',
       host: 'www.doubao.com',
       responseSelector: '[data-testid="message_text_content"].flow-markdown-body',
       getBlocks: (container) => {
@@ -228,6 +238,8 @@
     },
     kimi: {
       name: 'kimi',
+      displayName: 'Kimi',
+      logo: 'kimi-color.png',
       host: 'www.kimi.com',
       responseSelector: '.markdown',
       getBlocks: (container) => {
@@ -261,6 +273,8 @@
     },
     qianwen: {
       name: 'qianwen',
+      displayName: 'Qianwen',
+      logo: 'qwen-color.png',
       host: 'www.qianwen.com',
       responseSelector: '.qk-markdown',
       getBlocks: (container) => {
@@ -302,6 +316,8 @@
     },
     chatglm: {
       name: 'chatglm',
+      displayName: 'ChatGLM',
+      logo: 'qingyan-color.png',
       host: 'chatglm.cn',
       responseSelector: '.answer-content-wrap',
       getBlocks: (container) => {
@@ -364,6 +380,8 @@
     },
     copilot: {
       name: 'copilot',
+      displayName: 'Copilot',
+      logo: 'copilot-color.png',
       host: 'copilot.microsoft.com',
       responseSelector: '.group\\/ai-message-item',
       getBlocks: (container) => {
@@ -900,9 +918,12 @@
       showStatus('Stitching images...', 'info');
       await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
       
+      // Load platform logo for header
+      const logoImg = await loadLogo();
+      
       const finalCanvas = mode === 'horizontal' 
-        ? stitchImagesHorizontal(canvases)
-        : stitchImagesVertical(canvases);
+        ? stitchImagesHorizontal(canvases, logoImg)
+        : stitchImagesVertical(canvases, logoImg);
 
       // Free individual block canvases to reduce memory
       for (const c of canvases) {
@@ -1085,7 +1106,54 @@
     container.insertBefore(style, container.firstChild);
   }
 
-  function stitchImagesHorizontal(canvases) {
+  // Load platform logo image
+  async function loadLogo() {
+    if (!currentAdapter?.logo) return null;
+    try {
+      const url = chrome.runtime.getURL('logos/' + currentAdapter.logo);
+      return await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = url;
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  const HEADER_HEIGHT = 60;
+  const LOGO_SIZE = 32;
+
+  function drawHeader(ctx, totalWidth, logoImg, bgColor) {
+    const isDark = bgColor === '#1e1e1e';
+    
+    // Header background
+    ctx.fillStyle = isDark ? '#2a2a2a' : '#f5f5f5';
+    ctx.fillRect(0, 0, totalWidth, HEADER_HEIGHT);
+    
+    // Subtle bottom border
+    ctx.fillStyle = isDark ? '#3a3a3a' : '#e0e0e0';
+    ctx.fillRect(0, HEADER_HEIGHT - 1, totalWidth, 1);
+    
+    let textX = CONFIG.padding + 8;
+    
+    // Draw logo
+    if (logoImg) {
+      const logoY = (HEADER_HEIGHT - LOGO_SIZE) / 2;
+      ctx.drawImage(logoImg, CONFIG.padding + 8, logoY, LOGO_SIZE, LOGO_SIZE);
+      textX = CONFIG.padding + 8 + LOGO_SIZE + 12;
+    }
+    
+    // Draw platform name
+    const displayName = currentAdapter?.displayName || currentAdapter?.name || 'ChatShot';
+    ctx.fillStyle = isDark ? '#ffffff' : '#333333';
+    ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(displayName, textX, HEADER_HEIGHT / 2);
+  }
+
+  function stitchImagesHorizontal(canvases, logoImg) {
     if (canvases.length === 0) return null;
     
     // Determine number of columns based on block widths
@@ -1094,8 +1162,10 @@
       Math.floor((CONFIG.maxRowWidth - CONFIG.padding * 2 + CONFIG.blockGap) / (blockWidth + CONFIG.blockGap))
     ));
     
+    const headerOffset = HEADER_HEIGHT;
+    
     // Masonry layout: place each block in the shortest column
-    const colHeights = new Array(numCols).fill(CONFIG.padding);
+    const colHeights = new Array(numCols).fill(CONFIG.padding + headerOffset);
     const placements = []; // { canvas, x, y }
     
     for (const canvas of canvases) {
@@ -1119,8 +1189,12 @@
     finalCanvas.width = totalWidth;
     finalCanvas.height = totalHeight;
     const ctx = finalCanvas.getContext('2d');
-    ctx.fillStyle = detectedBgColor || '#ffffff';
+    const bgColor = detectedBgColor || '#ffffff';
+    ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, totalWidth, totalHeight);
+    
+    // Draw header
+    drawHeader(ctx, totalWidth, logoImg, bgColor);
     
     for (const { canvas, x, y } of placements) {
       ctx.drawImage(canvas, x, y);
@@ -1128,10 +1202,11 @@
     return finalCanvas;
   }
 
-  function stitchImagesVertical(canvases) {
+  function stitchImagesVertical(canvases, logoImg) {
     if (canvases.length === 0) return null;
     const gap = 2;
-    let maxWidth = 0, totalHeight = CONFIG.padding * 2;
+    const headerOffset = HEADER_HEIGHT;
+    let maxWidth = 0, totalHeight = CONFIG.padding * 2 + headerOffset;
     for (const canvas of canvases) {
       maxWidth = Math.max(maxWidth, canvas.width);
       totalHeight += canvas.height + gap;
@@ -1143,10 +1218,14 @@
     finalCanvas.width = maxWidth;
     finalCanvas.height = totalHeight;
     const ctx = finalCanvas.getContext('2d');
-    ctx.fillStyle = detectedBgColor || '#ffffff';
+    const bgColor = detectedBgColor || '#ffffff';
+    ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, maxWidth, totalHeight);
 
-    let y = CONFIG.padding;
+    // Draw header
+    drawHeader(ctx, maxWidth, logoImg, bgColor);
+
+    let y = CONFIG.padding + headerOffset;
     for (const canvas of canvases) {
       ctx.drawImage(canvas, CONFIG.padding, y);
       y += canvas.height + gap;
