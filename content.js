@@ -1082,49 +1082,42 @@
   function stitchImagesHorizontal(canvases) {
     if (canvases.length === 0) return null;
     
-    // Calculate dynamic max row width based on canvas widths
-    const avgWidth = canvases.reduce((sum, c) => sum + c.width, 0) / canvases.length;
-    const dynamicMaxRowWidth = Math.max(CONFIG.maxRowWidth, avgWidth * 3); // At least 3 blocks per row
+    // Determine number of columns based on block widths
+    const blockWidth = canvases[0].width;
+    const numCols = Math.max(2, Math.min(canvases.length, 
+      Math.floor((CONFIG.maxRowWidth - CONFIG.padding * 2 + CONFIG.blockGap) / (blockWidth + CONFIG.blockGap))
+    ));
     
-    const rows = []; let currentRow = []; let currentRowWidth = 0;
+    // Masonry layout: place each block in the shortest column
+    const colHeights = new Array(numCols).fill(CONFIG.padding);
+    const placements = []; // { canvas, x, y }
+    
     for (const canvas of canvases) {
-      // Only break if we have at least 2 items and would exceed max width
-      if (currentRowWidth + canvas.width > dynamicMaxRowWidth && currentRow.length >= 2) {
-        rows.push(currentRow); currentRow = []; currentRowWidth = 0;
+      // Find the shortest column
+      let minCol = 0;
+      for (let c = 1; c < numCols; c++) {
+        if (colHeights[c] < colHeights[minCol]) minCol = c;
       }
-      currentRow.push(canvas);
-      currentRowWidth += canvas.width + CONFIG.blockGap;
+      
+      const x = CONFIG.padding + minCol * (blockWidth + CONFIG.blockGap);
+      const y = colHeights[minCol];
+      placements.push({ canvas, x, y });
+      colHeights[minCol] = y + canvas.height + CONFIG.blockGap;
     }
-    if (currentRow.length > 0) rows.push(currentRow);
-
-    let totalWidth = 0, totalHeight = CONFIG.padding * 2;
-    for (const row of rows) {
-      let rowWidth = CONFIG.padding * 2, rowHeight = 0;
-      for (const canvas of row) {
-        rowWidth += canvas.width + CONFIG.blockGap;
-        rowHeight = Math.max(rowHeight, canvas.height);
-      }
-      totalWidth = Math.max(totalWidth, rowWidth - CONFIG.blockGap);
-      totalHeight += rowHeight + CONFIG.rowGap;
-    }
-    totalHeight -= CONFIG.rowGap;
-
+    
+    // Calculate final dimensions
+    const totalWidth = CONFIG.padding * 2 + numCols * blockWidth + (numCols - 1) * CONFIG.blockGap;
+    const totalHeight = Math.max(...colHeights) - CONFIG.blockGap + CONFIG.padding;
+    
     const finalCanvas = document.createElement('canvas');
     finalCanvas.width = totalWidth;
     finalCanvas.height = totalHeight;
     const ctx = finalCanvas.getContext('2d');
     ctx.fillStyle = detectedBgColor || '#ffffff';
     ctx.fillRect(0, 0, totalWidth, totalHeight);
-
-    let y = CONFIG.padding;
-    for (const row of rows) {
-      let x = CONFIG.padding, rowHeight = 0;
-      for (const canvas of row) {
-        ctx.drawImage(canvas, x, y);
-        x += canvas.width + CONFIG.blockGap;
-        rowHeight = Math.max(rowHeight, canvas.height);
-      }
-      y += rowHeight + CONFIG.rowGap;
+    
+    for (const { canvas, x, y } of placements) {
+      ctx.drawImage(canvas, x, y);
     }
     return finalCanvas;
   }
