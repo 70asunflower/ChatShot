@@ -856,7 +856,13 @@
     cancelBtn.className = 'ds-cancel-btn';
     cancelBtn.textContent = 'Cancel';
     cancelBtn.style.marginTop = '6px';
-    cancelBtn.onclick = () => { isCancelled = true; };
+    cancelBtn.onclick = () => {
+      isCancelled = true;
+      cancelBtn.textContent = 'Cancelling...';
+      cancelBtn.disabled = true;
+      cancelBtn.style.opacity = '0.6';
+      showStatus('Cancelling...', 'info');
+    };
     statusEl.parentElement.appendChild(cancelBtn);
 
     try {
