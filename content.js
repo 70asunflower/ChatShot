@@ -988,8 +988,9 @@
         maxWidth = Math.max(maxWidth, rect.width);
       }
     }
-    // Add padding and ensure minimum width
-    return Math.max(maxWidth + 32, 400); // 32 for padding, min 400px
+    // Add padding, ensure minimum width, and cap maximum to prevent code blocks from being too wide
+    const MAX_CAPTURE_WIDTH = 1200;
+    return Math.min(Math.max(maxWidth + 32, 400), MAX_CAPTURE_WIDTH);
   }
 
   // Cache CSS rules to avoid re-collecting for every block
@@ -1004,7 +1005,8 @@
       position: absolute; left: -9999px; top: 0;
       background: ${bgColor}; padding: 16px;
       width: ${targetWidth}px; min-width: ${targetWidth}px;
-      text-align: left;
+      max-width: ${targetWidth}px;
+      text-align: left; overflow: hidden;
     `;
 
     for (const el of block.elements) {
@@ -1012,6 +1014,13 @@
       copyElementStyles(el, clone, 0);
       tempContainer.appendChild(clone);
     }
+
+    // Constrain code blocks to prevent them from stretching beyond capture width
+    tempContainer.querySelectorAll('pre, .md-code-block, .ds-scroll-area').forEach(pre => {
+      pre.style.maxWidth = '100%';
+      pre.style.overflow = 'hidden';
+      pre.style.boxSizing = 'border-box';
+    });
 
     document.body.appendChild(tempContainer);
     copyComputedStyles(tempContainer);
