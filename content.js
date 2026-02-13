@@ -4,10 +4,10 @@
   // Configuration
   const CONFIG = {
     maxRowWidth: 3000,
-    blockGap: 4,
-    rowGap: 20,
+    blockGap: 2,
+    rowGap: 2,
     backgroundColor: '#1a1a1a',
-    padding: 20
+    padding: 10
   };
 
   // LLM Platform Adapters
@@ -1030,7 +1030,7 @@
     const tempContainer = document.createElement('div');
     tempContainer.style.cssText = `
       position: absolute; left: -9999px; top: 0;
-      background: ${bgColor}; padding: 16px;
+      background: ${bgColor}; padding: 8px;
       width: ${targetWidth}px; min-width: ${targetWidth}px;
       max-width: ${targetWidth}px;
       text-align: left; overflow: hidden;
