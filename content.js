@@ -4,7 +4,7 @@
   // Configuration
   const CONFIG = {
     maxRowWidth: 3000,
-    blockGap: 10,
+    blockGap: 4,
     rowGap: 20,
     backgroundColor: '#1a1a1a',
     padding: 20
@@ -1122,8 +1122,8 @@
     }
   }
 
-  const HEADER_HEIGHT = 60;
-  const LOGO_SIZE = 32;
+  const HEADER_HEIGHT = 72;
+  const LOGO_SIZE = 48;
 
   function drawHeader(ctx, totalWidth, logoImg, bgColor) {
     const isDark = bgColor === '#1e1e1e';
