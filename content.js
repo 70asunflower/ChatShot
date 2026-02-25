@@ -4,10 +4,10 @@
   // Configuration
   const CONFIG = {
     maxRowWidth: 3000,
-    blockGap: 2,
-    rowGap: 2,
+    blockGap: 4,
+    rowGap: 20,
     backgroundColor: '#1a1a1a',
-    padding: 10
+    padding: 20
   };
 
   // LLM Platform Adapters
@@ -925,21 +925,11 @@
         ? stitchImagesHorizontal(canvases, logoImg)
         : stitchImagesVertical(canvases, logoImg);
 
-      // Free individual block canvases to reduce memory
-      for (const c of canvases) {
-        c.width = 0;
-        c.height = 0;
-      }
-      canvases.length = 0;
-
       downloadImage(finalCanvas);
       
       // Free final canvas after download
       finalCanvas.width = 0;
       finalCanvas.height = 0;
-      
-      // Clear CSS cache to free memory
-      cachedCssText = null;
       
       showStatus('Done!', 'success');
 
@@ -947,6 +937,16 @@
       console.error('[ChatShot] Error:', error);
       showStatus('Error: ' + error.message, 'error');
     } finally {
+      // Always free captured canvases to prevent memory leak
+      for (const c of canvases) {
+        c.width = 0;
+        c.height = 0;
+      }
+      canvases.length = 0;
+      
+      // Clear CSS cache to free memory
+      cachedCssText = null;
+      
       btnH.disabled = false;
       btnV.disabled = false;
       // Remove cancel button
@@ -1030,7 +1030,7 @@
     const tempContainer = document.createElement('div');
     tempContainer.style.cssText = `
       position: absolute; left: -9999px; top: 0;
-      background: ${bgColor}; padding: 8px;
+      background: ${bgColor}; padding: 16px;
       width: ${targetWidth}px; min-width: ${targetWidth}px;
       max-width: ${targetWidth}px;
       text-align: left; overflow: hidden;
