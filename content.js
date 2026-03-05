@@ -1171,8 +1171,8 @@
   function stitchImagesHorizontal(canvases, logoImg) {
     if (canvases.length === 0) return null;
     
-    // Determine number of columns based on block widths
-    const blockWidth = canvases[0].width;
+    // Determine number of columns based on maximum block width
+    const blockWidth = Math.max(...canvases.map(c => c.width));
     const numCols = Math.max(2, Math.min(canvases.length, 
       Math.floor((CONFIG.maxRowWidth - CONFIG.padding * 2 + CONFIG.blockGap) / (blockWidth + CONFIG.blockGap))
     ));
@@ -1212,7 +1212,8 @@
     drawHeader(ctx, totalWidth, logoImg, bgColor);
     
     for (const { canvas, x, y } of placements) {
-      ctx.drawImage(canvas, x, y);
+      // Force drawing at exactly blockWidth to eliminate jagged edges
+      ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, x, y, blockWidth, canvas.height);
     }
     return finalCanvas;
   }
