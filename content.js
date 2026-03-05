@@ -1051,11 +1051,14 @@
     for (const el of block.elements) {
       const clone = el.cloneNode(true);
       copyElementStyles(el, clone, 0);
+      clone.style.width = '100%';
+      clone.style.boxSizing = 'border-box';
       tempContainer.appendChild(clone);
     }
 
     // Constrain code blocks to prevent them from stretching beyond capture width
     tempContainer.querySelectorAll('pre, .md-code-block, .ds-scroll-area').forEach(pre => {
+      pre.style.width = '100%'; // Ensure inner code blocks stretch
       pre.style.maxWidth = '100%';
       pre.style.overflow = 'hidden';
       pre.style.boxSizing = 'border-box';
