@@ -22,19 +22,31 @@
         const blocks = [];
         let currentBlock = null;
         const children = Array.from(container.children);
+        
         for (const child of children) {
           const tagName = child.tagName.toLowerCase();
-          if (tagName === 'h2' || tagName === 'h3') {
+          const isCode = child.classList.contains('md-code-block') || tagName === 'pre';
+          const isTable = child.classList.contains('ds-scroll-area') || tagName === 'table';
+          const isList = tagName === 'ul' || tagName === 'ol';
+          const isHeader = /^h[1-6]$/.test(tagName);
+          const isDivider = tagName === 'hr';
+          const isQuote = tagName === 'blockquote';
+          
+          if (isCode || isTable || isList || isHeader || isDivider || isQuote) {
             if (currentBlock && currentBlock.elements.length > 0) {
               blocks.push(currentBlock);
             }
-            currentBlock = { type: 'section', elements: [child] };
-          } else if (currentBlock) {
-            currentBlock.elements.push(child);
+            blocks.push({ 
+              type: isCode ? 'code' : isTable ? 'table' : isHeader ? 'header' : tagName, 
+              elements: [child] 
+            });
+            currentBlock = null;
           } else {
-            currentBlock = { type: 'default', elements: [child] };
+            if (!currentBlock) currentBlock = { type: 'text', elements: [] };
+            currentBlock.elements.push(child);
           }
         }
+        
         if (currentBlock && currentBlock.elements.length > 0) {
           blocks.push(currentBlock);
         }
@@ -925,11 +937,21 @@
         ? stitchImagesHorizontal(canvases, logoImg)
         : stitchImagesVertical(canvases, logoImg);
 
+      // Free individual block canvases to reduce memory
+      for (const c of canvases) {
+        c.width = 0;
+        c.height = 0;
+      }
+      canvases.length = 0;
+
       downloadImage(finalCanvas);
       
       // Free final canvas after download
       finalCanvas.width = 0;
       finalCanvas.height = 0;
+      
+      // Clear CSS cache to free memory
+      cachedCssText = null;
       
       showStatus('Done!', 'success');
 
@@ -937,16 +959,6 @@
       console.error('[ChatShot] Error:', error);
       showStatus('Error: ' + error.message, 'error');
     } finally {
-      // Always free captured canvases to prevent memory leak
-      for (const c of canvases) {
-        c.width = 0;
-        c.height = 0;
-      }
-      canvases.length = 0;
-      
-      // Clear CSS cache to free memory
-      cachedCssText = null;
-      
       btnH.disabled = false;
       btnV.disabled = false;
       // Remove cancel button
