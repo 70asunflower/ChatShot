@@ -1020,28 +1020,6 @@
 
   // Get max width of all blocks for unified capture
   function getBlocksMaxWidth(blocks) {
-    const MAX_CAPTURE_WIDTH = 1200;
-
-    // Try to find the visual container to capture the true flow width of the response
-    if (blocks.length > 0 && blocks[0].elements[0]) {
-      const firstEl = blocks[0].elements[0];
-      
-      // Attempt adapter's specific container or common response wrappers
-      const wrapperSelector = currentAdapter?.containerSelector || currentAdapter?.responseSelector || '.ds-message, .markdown-body, article, main';
-      
-      try {
-        const container = firstEl.closest(wrapperSelector);
-        if (container) {
-          const containerWidth = container.getBoundingClientRect().width;
-          // Return the container's physical bounded width to match the screen's visual flow
-          return Math.min(Math.max(containerWidth + 32, 400), MAX_CAPTURE_WIDTH);
-        }
-      } catch (e) {
-        // Fallback if selector fails
-      }
-    }
-
-    // Fallback if no container is found
     let maxWidth = 0;
     for (const block of blocks) {
       for (const el of block.elements) {
@@ -1050,6 +1028,7 @@
       }
     }
     // Add padding, ensure minimum width, and cap maximum to prevent code blocks from being too wide
+    const MAX_CAPTURE_WIDTH = 1200;
     return Math.min(Math.max(maxWidth + 32, 400), MAX_CAPTURE_WIDTH);
   }
 
