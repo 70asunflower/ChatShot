@@ -706,22 +706,45 @@
     document.body.appendChild(overlay);
   }
 
+  function getOverlayMetrics(block) {
+    const firstEl = block.elements[0];
+    const lastEl = block.elements[block.elements.length - 1];
+    const firstRect = firstEl.getBoundingClientRect();
+    const lastRect = lastEl.getBoundingClientRect();
+
+    let left = firstRect.left;
+    let width = Math.max(firstRect.width, lastRect.width);
+
+    if (isTableBlock(block)) {
+      const contextEl = getBlockRenderContext(block);
+      if (contextEl) {
+        const contextRect = contextEl.getBoundingClientRect();
+        left = contextRect.left;
+        width = contextRect.width;
+      }
+    }
+
+    return {
+      left,
+      top: firstRect.top,
+      width,
+      height: lastRect.bottom - firstRect.top
+    };
+  }
+
   // Update overlay positions on scroll
   function updateOverlayPositions() {
     detectedBlocks.forEach((block, index) => {
-      const overlay = document.querySelector(`.ds-block-overlay[data-index="${index}"]`);
+      const overlay = document.querySelector('.ds-block-overlay[data-index="' + index + '"]');
       if (!overlay) return;
 
-      const firstEl = block.elements[0];
-      const lastEl = block.elements[block.elements.length - 1];
-      const firstRect = firstEl.getBoundingClientRect();
-      const lastRect = lastEl.getBoundingClientRect();
-      
+      const metrics = getOverlayMetrics(block);
+
       overlay.style.position = 'fixed';
-      overlay.style.left = (firstRect.left - 8) + 'px';
-      overlay.style.top = (firstRect.top - 4) + 'px';
-      overlay.style.width = (Math.max(firstRect.width, lastRect.width) + 16) + 'px';
-      overlay.style.height = (lastRect.bottom - firstRect.top + 8) + 'px';
+      overlay.style.left = (metrics.left - 8) + 'px';
+      overlay.style.top = (metrics.top - 4) + 'px';
+      overlay.style.width = (metrics.width + 16) + 'px';
+      overlay.style.height = (metrics.height + 8) + 'px';
     });
   }
 
