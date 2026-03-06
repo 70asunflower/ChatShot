@@ -1204,17 +1204,27 @@
       el.style.width = '100%';
       el.style.minWidth = '100%';
       el.style.maxWidth = '100%';
+      el.style.height = 'auto';
+      el.style.minHeight = 'auto';
+      el.style.maxHeight = 'none';
       el.style.boxSizing = 'border-box';
       el.style.overflowX = 'visible';
       el.style.overflowY = 'visible';
+      el.style.setProperty('--container-height', 'auto');
     });
 
     root.querySelectorAll('table').forEach((table) => {
       table.style.width = '100%';
       table.style.minWidth = '100%';
       table.style.maxWidth = '100%';
+      table.style.height = 'auto';
       table.style.tableLayout = 'auto';
       table.style.borderCollapse = table.style.borderCollapse || 'collapse';
+    });
+
+    root.querySelectorAll('thead, tbody, tr').forEach((el) => {
+      el.style.height = 'auto';
+      el.style.maxHeight = 'none';
     });
 
     root.querySelectorAll('th, td').forEach((cell) => {

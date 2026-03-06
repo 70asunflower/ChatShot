@@ -1,4 +1,18 @@
-/* ChatShot - AI Chat Screenshot Plugin */
+/*
+ * ChatShot - UI Styles for the browser extension overlay.
+ *
+ * SECTIONS:
+ *   1. Floating Button Panel   - Fixed bottom-right buttons (H/V/selector)
+ *   2. Response Selector       - Dropdown to pick which AI response to capture
+ *   3. Status Messages         - Toast-style feedback (success/error/info)
+ *   4. Selection Toolbar       - Right-side toolbar during block selection mode
+ *   5. Block Overlays          - Green/orange rectangles over content blocks
+ *   6. Merge/Unmerge Buttons   - Orange (merge) and blue (unmerge) states
+ *   7. Block Checkbox/Number   - Corner badges on each overlay
+ *
+ * All classes are prefixed with 'ds-' to avoid conflicts with host page CSS.
+ * z-index: overlays=999, floating buttons=10000, toolbar=10001
+ */
 
 /* Floating button container */
 .ds-screenshot-btn {
