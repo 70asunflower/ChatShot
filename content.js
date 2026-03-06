@@ -1,16 +1,59 @@
+/*
+ * ChatShot - Browser extension to screenshot & stitch LLM chat responses.
+ *
+ * ARCHITECTURE OVERVIEW
+ * ====================
+ * This content script runs on supported LLM chat pages (DeepSeek, ChatGPT, etc.).
+ *
+ * DATA FLOW:
+ *   1. Platform Detection  - getCurrentPlatform() matches hostname to an adapter
+ *   2. Response Selection   - User picks which AI response to capture via dropdown
+ *   3. Block Detection      - adapter.getBlocks() parses the response DOM into blocks
+ *                             Each block = { type: string, elements: HTMLElement[] }
+ *   4. Selection Mode       - Green overlays shown on blocks; user can toggle/merge/unmerge
+ *   5. Capture              - Each selected block is cloned into an off-screen container,
+ *                             styles are copied, then html2canvas renders it to a <canvas>
+ *   6. Stitching            - Block canvases are arranged into a final image:
+ *                             Horizontal mode = masonry/waterfall multi-column layout
+ *                             Vertical mode   = single column, stacked top-to-bottom
+ *   7. Download             - Final canvas exported as PNG via data URL
+ *
+ * LLM ADAPTER SYSTEM:
+ *   Each adapter in LLM_ADAPTERS defines:
+ *     - host             : hostname to match for this platform
+ *     - responseSelector  : CSS selector for the AI response container
+ *     - getBlocks(el)     : splits the container DOM into content blocks
+ *     - getResponseTitle  : derives a short title from the response for the dropdown
+ *     - displayName, logo : branding for the screenshot header
+ *
+ * KNOWN ISSUES / GOTCHAS:
+ *   - Table blocks (.ds-scroll-area on DeepSeek) report wider getBoundingClientRect()
+ *     than their visible area due to scrollable overflow. This causes overlay misalignment
+ *     and garbled capture when width:100% is forced on the clone. The table's native
+ *     column layout is lost because copyElementStyles() only copies a limited set of CSS
+ *     properties (see COPY_STYLE_PROPS) and omits table-layout / column-width properties.
+ *   - getBlocksMaxWidth() currently uses the widest element's client rect + 32px padding,
+ *     clamped to [400, 1200]. This can be too narrow for short text or too wide for tables.
+ *     Attempts to use container-based width detection (.ds-message / .ds-markdown) have
+ *     caused regressions; see git log for details.
+ */
 (function() {
   'use strict';
 
-  // Configuration
+  // Layout constants for the final stitched image
   const CONFIG = {
-    maxRowWidth: 3000,
-    blockGap: 4,
-    rowGap: 20,
+    maxRowWidth: 3000,  // max total pixel width of the masonry output
+    blockGap: 4,        // gap between blocks in masonry layout (px)
+    rowGap: 20,         // (unused legacy) gap between rows
     backgroundColor: '#1a1a1a',
-    padding: 20
+    padding: 20         // outer padding of the final image (px)
   };
 
-  // LLM Platform Adapters
+  // ====================================================================
+  // SECTION: LLM Platform Adapters
+  // Each adapter handles one AI chat platform's DOM structure.
+  // Key contract: getBlocks(container) -> Array<{ type, elements[] }>
+  // ====================================================================
   const LLM_ADAPTERS = {
     deepseek: {
       name: 'deepseek',
@@ -22,31 +65,37 @@
         const blocks = [];
         let currentBlock = null;
         const children = Array.from(container.children);
-        
+
         for (const child of children) {
           const tagName = child.tagName.toLowerCase();
           const isCode = child.classList.contains('md-code-block') || tagName === 'pre';
           const isTable = child.classList.contains('ds-scroll-area') || tagName === 'table';
-          const isList = tagName === 'ul' || tagName === 'ol';
-          const isHeader = /^h[1-6]$/.test(tagName);
           const isDivider = tagName === 'hr';
-          const isQuote = tagName === 'blockquote';
-          
-          if (isCode || isTable || isList || isHeader || isDivider || isQuote) {
+
+          if (isDivider) {
             if (currentBlock && currentBlock.elements.length > 0) {
               blocks.push(currentBlock);
+              currentBlock = null;
             }
-            blocks.push({ 
-              type: isCode ? 'code' : isTable ? 'table' : isHeader ? 'header' : tagName, 
-              elements: [child] 
-            });
-            currentBlock = null;
-          } else {
-            if (!currentBlock) currentBlock = { type: 'text', elements: [] };
-            currentBlock.elements.push(child);
+            continue;
           }
+
+          if (isCode || isTable) {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+              currentBlock = null;
+            }
+            blocks.push({
+              type: isCode ? 'code' : 'table',
+              elements: [child]
+            });
+            continue;
+          }
+
+          if (!currentBlock) currentBlock = { type: 'section', elements: [] };
+          currentBlock.elements.push(child);
         }
-        
+
         if (currentBlock && currentBlock.elements.length > 0) {
           blocks.push(currentBlock);
         }
@@ -442,7 +491,11 @@
     }
   };
 
-  // Detect current platform
+  // ====================================================================
+  // SECTION: Platform Detection & Global State
+  // ====================================================================
+
+  // Match current hostname to an adapter; fallback to deepseek
   function getCurrentPlatform() {
     const host = window.location.host;
     for (const [key, adapter] of Object.entries(LLM_ADAPTERS)) {
@@ -450,24 +503,28 @@
         return adapter;
       }
     }
-    return LLM_ADAPTERS.deepseek; // fallback
+    return LLM_ADAPTERS.deepseek;
   }
 
   let currentAdapter = null;
 
-  // State variables
-  let selectedResponseIndex = -1;
-  let detectedBgColor = null;
-  let isCancelled = false;
-  
-  // Selection mode state
+  // --- Global state ---
+  let selectedResponseIndex = -1;  // -1 = latest response
+  let detectedBgColor = null;      // cached background color for current capture session
+  let isCancelled = false;         // capture cancellation flag
+
+  // --- Selection mode state ---
   let isSelectionMode = false;
-  let currentCaptureMode = 'horizontal';
-  let detectedBlocks = [];
-  let selectedBlockIndices = new Set();
+  let currentCaptureMode = 'horizontal'; // 'horizontal' | 'vertical'
+  let detectedBlocks = [];               // Array<{ type, elements[] }>
+  let selectedBlockIndices = new Set();  // indices of blocks to capture
   let mergeSelectedIndices = new Set(); // For merge multi-select
 
-  // Initialize
+  // ====================================================================
+  // SECTION: UI Initialization
+  // Creates the floating button panel, response selector dropdown,
+  // and selection-mode toolbar. Called once on page load.
+  // ====================================================================
   function init() {
     if (document.querySelector('.ds-screenshot-btn')) return;
     currentAdapter = getCurrentPlatform();
@@ -573,7 +630,11 @@
     }
   }
 
-  // Enter selection mode
+  // ====================================================================
+  // SECTION: Selection Mode
+  // User selects/deselects content blocks via green overlays.
+  // Supports: toggle, select-all, select-none, merge, unmerge.
+  // ====================================================================
   function enterSelectionMode(mode) {
     if (isSelectionMode) return;
 
@@ -853,22 +914,24 @@
       `Selected: ${selectedBlockIndices.size}/${detectedBlocks.length}`;
   }
 
-  // Confirm capture
+  // ====================================================================
+  // SECTION: Capture Pipeline
+  // Flow: confirmCapture -> doCapture -> captureBlock (per block) -> stitch -> download
+  // ====================================================================
+
   async function confirmCapture() {
     if (selectedBlockIndices.size === 0) {
       showStatus('Please select at least one block', 'error');
       return;
     }
-
     const blocksToCapture = Array.from(selectedBlockIndices)
       .sort((a, b) => a - b)
       .map(i => detectedBlocks[i]);
-
     exitSelectionMode();
     await doCapture(blocksToCapture, currentCaptureMode);
   }
 
-  // Actual capture
+  // Main capture orchestrator: captures blocks one by one, then stitches
   async function doCapture(blocks, mode) {
     const btnH = document.getElementById('ds-capture-h');
     const btnV = document.getElementById('ds-capture-v');
@@ -981,6 +1044,7 @@
     return currentAdapter.getBlocks(container);
   }
 
+  // Detect dark/light theme from page CSS to match screenshot background
   function detectThemeBackground() {
     const html = document.documentElement;
     const body = document.body;
@@ -1018,51 +1082,163 @@
     return luminance < 0.5;
   }
 
-  // Get max width of all blocks for unified capture
+  // Calculate a uniform capture width for all blocks.
+  // Prefer the actual response container width so code blocks, tables, and text
+  // all render at the same width they use on the page.
   function getBlocksMaxWidth(blocks) {
-    let maxWidth = 0;
+    let maxContextWidth = 0;
+    let maxElementWidth = 0;
+
     for (const block of blocks) {
+      const contextEl = block?.elements?.[0]?.closest(currentAdapter.responseSelector);
+      if (contextEl) {
+        maxContextWidth = Math.max(maxContextWidth, contextEl.getBoundingClientRect().width);
+      }
+
       for (const el of block.elements) {
         const rect = el.getBoundingClientRect();
-        maxWidth = Math.max(maxWidth, rect.width);
+        maxElementWidth = Math.max(maxElementWidth, rect.width);
       }
     }
-    // Add padding, ensure minimum width, and cap maximum to prevent code blocks from being too wide
+
+    const preferredWidth = maxContextWidth || maxElementWidth;
     const MAX_CAPTURE_WIDTH = 1200;
-    return Math.min(Math.max(maxWidth + 32, 400), MAX_CAPTURE_WIDTH);
+    return Math.min(Math.max(preferredWidth, 400), MAX_CAPTURE_WIDTH);
   }
 
   // Cache CSS rules to avoid re-collecting for every block
   let cachedCssText = null;
 
+  function isTableLikeElement(el) {
+    if (!el) return false;
+    const tagName = el.tagName?.toLowerCase();
+    return tagName === 'table' || tagName === 'thead' || tagName === 'tbody' ||
+      tagName === 'tr' || tagName === 'th' || tagName === 'td' ||
+      el.classList?.contains('ds-scroll-area');
+  }
+
+  function isTableBlock(block) {
+    return block.type === 'table' || block.elements.some(el =>
+      isTableLikeElement(el) || el.querySelector?.('table, .ds-scroll-area')
+    );
+  }
+
+  function getBlockRenderContext(block) {
+    const firstEl = block?.elements?.[0];
+    if (!firstEl) return null;
+    return firstEl.closest(currentAdapter.responseSelector);
+  }
+
+  function copyCssVariablesFromAncestors(source, target) {
+    const chain = [];
+    let node = source;
+    while (node && node.nodeType === Node.ELEMENT_NODE) {
+      chain.unshift(node);
+      node = node.parentElement;
+    }
+
+    for (const el of chain) {
+      const style = window.getComputedStyle(el);
+      for (let i = 0; i < style.length; i++) {
+        const prop = style[i];
+        if (prop.startsWith('--')) {
+          target.style.setProperty(prop, style.getPropertyValue(prop));
+        }
+      }
+    }
+  }
+
+  function createCaptureContentRoot(block, tempContainer) {
+    const sourceRoot = getBlockRenderContext(block);
+    if (!sourceRoot) return tempContainer;
+
+    const contentRoot = document.createElement('div');
+    contentRoot.className = sourceRoot.className;
+    contentRoot.style.width = '100%';
+    contentRoot.style.maxWidth = '100%';
+    contentRoot.style.boxSizing = 'border-box';
+    copyCssVariablesFromAncestors(sourceRoot, contentRoot);
+    tempContainer.appendChild(contentRoot);
+    return contentRoot;
+  }
+
+  function preserveTableLayoutStyles(source, target) {
+    const style = window.getComputedStyle(source);
+    const extraProps = [
+      'width', 'min-width', 'max-width', 'height',
+      'table-layout', 'border-collapse', 'border-spacing',
+      'vertical-align', 'word-break', 'overflow', 'overflow-x', 'overflow-y'
+    ];
+    for (const prop of extraProps) {
+      target.style[prop] = style.getPropertyValue(prop);
+    }
+  }
+
+  function normalizeTableCloneLayout(root) {
+    root.querySelectorAll('.ds-scroll-area__gutters').forEach((el) => el.remove());
+
+    root.querySelectorAll('.ds-scroll-area').forEach((el) => {
+      el.style.width = '100%';
+      el.style.minWidth = '100%';
+      el.style.maxWidth = '100%';
+      el.style.boxSizing = 'border-box';
+      el.style.overflowX = 'visible';
+      el.style.overflowY = 'visible';
+    });
+
+    root.querySelectorAll('table').forEach((table) => {
+      table.style.width = '100%';
+      table.style.minWidth = '100%';
+      table.style.maxWidth = '100%';
+      table.style.tableLayout = 'auto';
+      table.style.borderCollapse = table.style.borderCollapse || 'collapse';
+    });
+
+    root.querySelectorAll('th, td').forEach((cell) => {
+      cell.style.whiteSpace = 'normal';
+      cell.style.wordBreak = 'keep-all';
+    });
+  }
+
+  // Capture a single block to a <canvas>.
+  // Process: clone elements -> copy inline styles -> inject page CSS -> html2canvas
   async function captureBlock(block, targetWidth = 800) {
     if (!detectedBgColor) detectedBgColor = detectThemeBackground();
     const bgColor = detectedBgColor;
+    const tableBlock = isTableBlock(block);
 
     const tempContainer = document.createElement('div');
-    tempContainer.style.cssText = `
-      position: absolute; left: -9999px; top: 0;
-      background: ${bgColor}; padding: 16px;
-      width: ${targetWidth}px; min-width: ${targetWidth}px;
-      max-width: ${targetWidth}px;
-      text-align: left; overflow: hidden;
-    `;
+    tempContainer.style.cssText =
+      'position: absolute; left: -9999px; top: 0;' +
+      'background: ' + bgColor + '; padding: 16px;' +
+      'width: ' + targetWidth + 'px; min-width: ' + targetWidth + 'px;' +
+      'max-width: ' + targetWidth + 'px;' +
+      'text-align: left; overflow: ' + (tableBlock ? 'visible' : 'hidden') + ';';
+
+    const contentRoot = createCaptureContentRoot(block, tempContainer);
 
     for (const el of block.elements) {
       const clone = el.cloneNode(true);
       copyElementStyles(el, clone, 0);
-      clone.style.width = '100%';
+      if (tableBlock && isTableLikeElement(el)) {
+        preserveTableLayoutStyles(el, clone);
+      } else {
+        clone.style.width = '100%';
+      }
       clone.style.boxSizing = 'border-box';
-      tempContainer.appendChild(clone);
+      contentRoot.appendChild(clone);
     }
 
-    // Constrain code blocks to prevent them from stretching beyond capture width
-    tempContainer.querySelectorAll('pre, .md-code-block, .ds-scroll-area').forEach(pre => {
-      pre.style.width = '100%'; // Ensure inner code blocks stretch
+    contentRoot.querySelectorAll('pre, .md-code-block, .ds-scroll-area').forEach(pre => {
+      pre.style.width = '100%';
       pre.style.maxWidth = '100%';
       pre.style.overflow = 'hidden';
       pre.style.boxSizing = 'border-box';
     });
+
+    if (tableBlock) {
+      normalizeTableCloneLayout(contentRoot);
+    }
 
     document.body.appendChild(tempContainer);
     copyComputedStyles(tempContainer);
@@ -1083,16 +1259,27 @@
     }
   }
 
-  const COPY_STYLE_PROPS = ['color', 'font-family', 'font-size', 'font-weight', 'line-height', 
+  // ====================================================================
+  // SECTION: Style Copying
+  // Cloned elements lose their page styles. We copy a subset of computed
+  // styles recursively, plus inject all page CSS rules into the container.
+  // IMPORTANT: This list does NOT include 'width', 'height', 'table-layout',
+  //   'border-collapse', etc. Adding 'width' fixes tables but may break
+  //   text blocks that should reflow to targetWidth.
+  // ====================================================================
+  const COPY_STYLE_PROPS = ['color', 'font-family', 'font-size', 'font-weight', 'line-height',
      'background-color', 'border', 'padding', 'margin', 'text-align',
      'display', 'list-style-type', 'white-space'];
-  const MAX_STYLE_DEPTH = 8;
+  const MAX_STYLE_DEPTH = 8; // max recursion depth for child elements
 
   function copyElementStyles(source, target, depth) {
     if (depth > MAX_STYLE_DEPTH) return;
     const style = window.getComputedStyle(source);
     for (const prop of COPY_STYLE_PROPS) {
       target.style[prop] = style.getPropertyValue(prop);
+    }
+    if (isTableLikeElement(source)) {
+      preserveTableLayoutStyles(source, target);
     }
     const len = Math.min(source.children.length, target.children.length);
     for (let i = 0; i < len; i++) {
@@ -1121,7 +1308,12 @@
     container.insertBefore(style, container.firstChild);
   }
 
-  // Load platform logo image
+  // ====================================================================
+  // SECTION: Image Stitching & Output
+  // After capturing each block to a canvas, blocks are composed into
+  // a final image with a branded header (logo + platform name).
+  // ====================================================================
+
   async function loadLogo() {
     if (!currentAdapter?.logo) return null;
     try {
@@ -1137,8 +1329,8 @@
     }
   }
 
-  const HEADER_HEIGHT = 72;
-  const LOGO_SIZE = 48;
+  const HEADER_HEIGHT = 72;  // px, height of the branded header bar
+  const LOGO_SIZE = 48;      // px, logo dimensions in the header
 
   function drawHeader(ctx, totalWidth, logoImg, bgColor) {
     const isDark = bgColor === '#1e1e1e';
@@ -1168,6 +1360,8 @@
     ctx.fillText(displayName, textX, HEADER_HEIGHT / 2);
   }
 
+  // Masonry layout: blocks placed into N columns, each block goes into the shortest column.
+  // All columns use the same width (= widest block canvas) to avoid jagged right edges.
   function stitchImagesHorizontal(canvases, logoImg) {
     if (canvases.length === 0) return null;
     
@@ -1218,6 +1412,7 @@
     return finalCanvas;
   }
 
+  // Simple vertical stack: all blocks in a single column, top to bottom.
   function stitchImagesVertical(canvases, logoImg) {
     if (canvases.length === 0) return null;
     const gap = 2;
@@ -1276,3 +1471,6 @@
     init();
   }
 })();
+
+
+
