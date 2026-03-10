@@ -552,7 +552,7 @@
       <span id="ds-selection-count">Selected: 0/0</span>
       <button id="ds-select-all">All</button>
       <button id="ds-select-none">None</button>
-      <button id="ds-merge-blocks" title="Shift+click blocks to select, then merge">Merge</button>
+      <button id="ds-merge-blocks" title="Ctrl+click blocks to select, then merge">Merge</button>
       <button id="ds-unmerge-block" title="Unmerge selected merged block">Unmerge</button>
       <button id="ds-confirm-capture">Capture</button>
       <button id="ds-cancel-selection">Cancel</button>
@@ -748,13 +748,13 @@
     });
   }
 
-  // Toggle block selection (with Shift support for merge)
+  // Toggle block selection (with Ctrl support for merge)
   function toggleBlockSelection(index, event) {
     const overlay = document.querySelector(`.ds-block-overlay[data-index="${index}"]`);
-    const isShiftClick = event?.shiftKey;
+    const isCtrlClick = event?.ctrlKey;
     
-    if (isShiftClick) {
-      // Shift+click: toggle merge selection (visual highlight)
+    if (isCtrlClick) {
+      // Ctrl+click: toggle merge selection (visual highlight)
       if (mergeSelectedIndices.has(index)) {
         mergeSelectedIndices.delete(index);
         overlay?.classList.remove('merge-selected');
@@ -791,7 +791,7 @@
   // Merge selected blocks into one
   function mergeSelectedBlocks() {
     if (mergeSelectedIndices.size < 2) {
-      showStatus('Shift+click 2+ adjacent blocks to merge', 'error');
+      showStatus('Ctrl+click 2+ adjacent blocks to merge', 'error');
       return;
     }
     
@@ -857,7 +857,7 @@
     );
     
     if (mergeIdx === undefined) {
-      showStatus('Shift+click a merged block to unmerge', 'error');
+      showStatus('Ctrl+click a merged block to unmerge', 'error');
       return;
     }
     
@@ -1504,6 +1504,7 @@
     init();
   }
 })();
+
 
 
 
