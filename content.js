@@ -1030,7 +1030,7 @@
       }
       canvases.length = 0;
 
-      downloadImage(finalCanvas);
+      await downloadImage(finalCanvas);
       
       // Free final canvas after download
       finalCanvas.width = 0;
@@ -1279,7 +1279,7 @@
     try {
       const canvas = await html2canvas(tempContainer, {
         backgroundColor: bgColor,
-        scale: 2,
+        scale: 1.25,
         useCORS: true,
         allowTaint: true,
         foreignObjectRendering: false,
@@ -1400,10 +1400,8 @@
     
     // Determine number of columns based on maximum block width
     const blockWidth = Math.max(...canvases.map(c => c.width));
-    const numCols = Math.max(2, Math.min(canvases.length, 
-      Math.floor((CONFIG.maxRowWidth - CONFIG.padding * 2 + CONFIG.blockGap) / (blockWidth + CONFIG.blockGap))
-    ));
-    
+    const numCols = 2;
+
     const headerOffset = HEADER_HEIGHT;
     
     // Masonry layout: place each block in the shortest column
@@ -1504,6 +1502,9 @@
     init();
   }
 })();
+
+
+
 
 
 
