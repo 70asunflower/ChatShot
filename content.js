@@ -1279,7 +1279,7 @@
     try {
       const canvas = await html2canvas(tempContainer, {
         backgroundColor: bgColor,
-        scale: 1.25,
+        scale: 1,
         useCORS: true,
         allowTaint: true,
         foreignObjectRendering: false,
@@ -1502,6 +1502,7 @@
     init();
   }
 })();
+
 
 
 

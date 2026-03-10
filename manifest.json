@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatShot",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Capture AI chat responses as screenshots and stitch them for easy sharing",
   "permissions": ["activeTab"],
   "icons": {
@@ -31,4 +31,5 @@
     }
   ]
 }
+
 
