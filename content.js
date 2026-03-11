@@ -630,6 +630,33 @@
     }
   }
 
+  function showSelectionToast(message, durationMs = 1500) {
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.cssText = [
+      'position: fixed',
+      'left: 50%',
+      'top: 50%',
+      'transform: translate(-50%, -50%)',
+      'padding: 10px 14px',
+      'border-radius: 8px',
+      'background: rgba(239, 68, 68, 0.92)',
+      'color: #fff',
+      'font-size: 15px',
+      'text-align: center',
+      'box-shadow: 0 8px 24px rgba(0,0,0,0.45)',
+      'z-index: 10002',
+      'pointer-events: none',
+      'opacity: 1',
+      'transition: opacity 0.6s ease'
+    ].join(';');
+
+    document.body.appendChild(toast);
+
+    const fadeDelay = Math.max(200, durationMs - 600);
+    setTimeout(() => { toast.style.opacity = '0'; }, fadeDelay);
+    setTimeout(() => toast.remove(), durationMs);
+  }
   // ====================================================================
   // SECTION: Selection Mode
   // User selects/deselects content blocks via green overlays.
@@ -800,7 +827,7 @@
     // Check if indices are consecutive
     for (let i = 1; i < indices.length; i++) {
       if (indices[i] !== indices[i-1] + 1) {
-        showStatus('Can only merge adjacent blocks', 'error');
+        showSelectionToast('Can only merge adjacent blocks');
         return;
       }
     }
@@ -1502,6 +1529,9 @@
     init();
   }
 })();
+
+
+
 
 
 
