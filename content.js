@@ -1341,9 +1341,14 @@
   //   'border-collapse', etc. Adding 'width' fixes tables but may break
   //   text blocks that should reflow to targetWidth.
   // ====================================================================
-  const COPY_STYLE_PROPS = ['color', 'font-family', 'font-size', 'font-weight', 'line-height',
-     'background-color', 'border', 'padding', 'margin', 'text-align',
-     'display', 'list-style-type', 'white-space'];
+  const COPY_STYLE_PROPS = [
+    'color', 'font-family', 'font-size', 'font-weight', 'line-height',
+    'background-color', 'border', 'padding', 'margin', 'text-align',
+    'display', 'list-style-type', 'white-space',
+    'position', 'top', 'bottom', 'left', 'right', 'z-index',
+    'flex-direction', 'flex-wrap', 'align-items', 'justify-content', 'gap',
+    'box-sizing', 'border-radius', 'overflow-wrap', 'word-break'
+  ];
   const MAX_STYLE_DEPTH = 8; // max recursion depth for child elements
 
   function copyElementStyles(source, target, depth) {
