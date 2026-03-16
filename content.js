@@ -1341,13 +1341,31 @@
   //   'border-collapse', etc. Adding 'width' fixes tables but may break
   //   text blocks that should reflow to targetWidth.
   // ====================================================================
+  // We use specific sub-properties rather than shorthands (like 'padding', 'margin', 'border')
+  // because window.getComputedStyle(el).getPropertyValue('padding') often returns an empty
+  // string if the four sides have different values (which is very common in Tailwind, e.g. pt-3 pe-11).
   const COPY_STYLE_PROPS = [
     'color', 'font-family', 'font-size', 'font-weight', 'line-height',
-    'background-color', 'border', 'padding', 'margin', 'text-align',
-    'display', 'list-style-type', 'white-space',
+    'background-color', 'text-align', 'display', 'list-style-type', 'white-space',
     'position', 'top', 'bottom', 'left', 'right', 'z-index',
     'flex-direction', 'flex-wrap', 'align-items', 'justify-content', 'gap',
-    'box-sizing', 'border-radius', 'overflow-wrap', 'word-break'
+    'box-sizing', 'overflow-wrap', 'word-break',
+    // Specific Padding
+    'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+    // Specific Margin
+    'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+    // Specific Borders
+    'border-top-width', 'border-top-style', 'border-top-color',
+    'border-right-width', 'border-right-style', 'border-right-color',
+    'border-bottom-width', 'border-bottom-style', 'border-bottom-color',
+    'border-left-width', 'border-left-style', 'border-left-color',
+    // Specific Border Radius
+    'border-top-left-radius', 'border-top-right-radius',
+    'border-bottom-right-radius', 'border-bottom-left-radius',
+    // Visibility & Others
+    'opacity', 'visibility', 'transform', 'overflow', 'overflow-x', 'overflow-y',
+    // SVG support for icons
+    'fill', 'stroke'
   ];
   const MAX_STYLE_DEPTH = 8; // max recursion depth for child elements
 
