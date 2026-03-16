@@ -1367,6 +1367,27 @@
   // Affected sites: ChatGPT (uses lab(), oklch() extensively)
   const UNSUPPORTED_COLOR_RE = /\b(lab|lch|oklch|oklab|color-mix|color)\s*\(/i;
 
+  // Strip only the individual declarations that contain unsupported color
+  // functions, keeping all other declarations in the same rule intact.
+  // This avoids dropping entire rules (which caused elements to lose ALL
+  // their styles and render as white boxes).
+  function sanitizeCssRule(cssText) {
+    const braceStart = cssText.indexOf('{');
+    if (braceStart === -1) return cssText; // @import or similar
+    const braceEnd = cssText.lastIndexOf('}');
+    if (braceEnd === -1) return cssText;
+
+    const selector = cssText.substring(0, braceStart);
+    const body = cssText.substring(braceStart + 1, braceEnd);
+
+    const declarations = body.split(';')
+      .map(d => d.trim())
+      .filter(d => d && !UNSUPPORTED_COLOR_RE.test(d));
+
+    if (declarations.length === 0) return ''; // every declaration had unsupported colors
+    return selector + '{ ' + declarations.join('; ') + '; }';
+  }
+
   function copyComputedStyles(container) {
     // Cache CSS text so we only collect rules once per capture session
     if (cachedCssText === null) {
@@ -1377,9 +1398,13 @@
             const rules = sheet.cssRules;
             for (let i = 0; i < rules.length; i++) {
               const ruleText = rules[i].cssText;
-              // Skip rules with color functions that html2canvas cannot parse
-              if (UNSUPPORTED_COLOR_RE.test(ruleText)) continue;
-              parts.push(ruleText);
+              if (UNSUPPORTED_COLOR_RE.test(ruleText)) {
+                // Preserve rule but strip only the bad declarations
+                const sanitized = sanitizeCssRule(ruleText);
+                if (sanitized) parts.push(sanitized);
+              } else {
+                parts.push(ruleText);
+              }
             }
           } catch (e) {}
         }
