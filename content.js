@@ -1261,7 +1261,9 @@
   }
 
   // Capture a single block to a <canvas>.
-  // Process: clone elements -> copy inline styles -> inject page CSS -> html2canvas
+  // Process: clone elements -> copy inline styles -> render in isolated iframe -> html2canvas
+  // The iframe isolates html2canvas from the host page's CSS which may contain
+  // unsupported color functions (lab, oklch, etc.) that crash html2canvas's parser.
   async function captureBlock(block, targetWidth = 800) {
     if (!detectedBgColor) detectedBgColor = detectThemeBackground();
     const bgColor = detectedBgColor;
@@ -1269,7 +1271,6 @@
 
     const tempContainer = document.createElement('div');
     tempContainer.style.cssText =
-      'position: absolute; left: -9999px; top: 0;' +
       'background: ' + bgColor + '; padding: 16px;' +
       'width: ' + targetWidth + 'px; min-width: ' + targetWidth + 'px;' +
       'max-width: ' + targetWidth + 'px;' +
@@ -1300,10 +1301,23 @@
       normalizeTableCloneLayout(contentRoot);
     }
 
-    document.body.appendChild(tempContainer);
-    copyComputedStyles(tempContainer);
+    // Render inside an isolated iframe so html2canvas only sees our filtered CSS,
+    // not the host page's stylesheets that may contain unsupported color functions.
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:' +
+      (targetWidth + 64) + 'px;height:10000px;border:none;visibility:hidden;';
+    document.body.appendChild(iframe);
 
     try {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      iframeDoc.open();
+      iframeDoc.write('<!DOCTYPE html><html><head></head><body style="margin:0;padding:0;"></body></html>');
+      iframeDoc.close();
+
+      // Inject only our filtered page CSS (no lab/oklch/etc.)
+      copyComputedStyles(iframeDoc.body);
+      iframeDoc.body.appendChild(tempContainer);
+
       const canvas = await html2canvas(tempContainer, {
         backgroundColor: bgColor,
         scale: 1,
@@ -1315,7 +1329,7 @@
       });
       return canvas;
     } finally {
-      tempContainer.remove();
+      iframe.remove();
     }
   }
 
@@ -1347,6 +1361,12 @@
     }
   }
 
+  // Regex to detect CSS color functions unsupported by html2canvas.
+  // These modern CSS4 color specs cause html2canvas to throw:
+  //   "Attempting to parse an unsupported color function"
+  // Affected sites: ChatGPT (uses lab(), oklch() extensively)
+  const UNSUPPORTED_COLOR_RE = /\b(lab|lch|oklch|oklab|color-mix|color)\s*\(/i;
+
   function copyComputedStyles(container) {
     // Cache CSS text so we only collect rules once per capture session
     if (cachedCssText === null) {
@@ -1356,7 +1376,10 @@
           try {
             const rules = sheet.cssRules;
             for (let i = 0; i < rules.length; i++) {
-              parts.push(rules[i].cssText);
+              const ruleText = rules[i].cssText;
+              // Skip rules with color functions that html2canvas cannot parse
+              if (UNSUPPORTED_COLOR_RE.test(ruleText)) continue;
+              parts.push(ruleText);
             }
           } catch (e) {}
         }
