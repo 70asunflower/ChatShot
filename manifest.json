@@ -26,7 +26,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["logos/*.png"],
+      "resources": ["logos/*.png", "lib/katex.min.js", "lib/katex.min.css"],
       "matches": ["<all_urls>"]
     }
   ]

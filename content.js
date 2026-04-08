@@ -1314,9 +1314,53 @@
       iframeDoc.write('<!DOCTYPE html><html><head></head><body style="margin:0;padding:0;"></body></html>');
       iframeDoc.close();
 
+      // Inject KaTeX into the iframe for math formula rendering.
+      // Use chrome.runtime.getURL() so the extension's local lib files are accessible
+      // from within the iframe, bypassing the extension's CSP which blocks external CDN scripts.
+      const katexScript = iframeDoc.createElement('script');
+      katexScript.src = chrome.runtime.getURL('lib/katex.min.js');
+      iframeDoc.head.appendChild(katexScript);
+
+      const katexCss = iframeDoc.createElement('link');
+      katexCss.rel = 'stylesheet';
+      katexCss.href = chrome.runtime.getURL('lib/katex.min.css');
+      iframeDoc.head.appendChild(katexCss);
+
+      // Wait for KaTeX to be available in the iframe context
+      await new Promise((resolve, reject) => {
+        katexScript.onload = resolve;
+        katexScript.onerror = reject;
+      });
+
       // Inject only our filtered page CSS (no lab/oklch/etc.)
       copyComputedStyles(iframeDoc.body);
       iframeDoc.body.appendChild(tempContainer);
+
+      // Inject a script into the iframe that re-renders all KaTeX formulas
+      // BEFORE html2canvas processes the DOM. This script runs inside the iframe's
+      // own context where the katex global is available from the CDN we loaded.
+      const renderScript = iframeDoc.createElement('script');
+      renderScript.textContent = `
+        (function() {
+          if (typeof katex === 'undefined') return;
+          var katexEls = document.querySelectorAll('.katex');
+          for (var i = 0; i < katexEls.length; i++) {
+            var el = katexEls[i];
+            var mathml = el.querySelector('.katex-mathml');
+            var htmlOut = el.querySelector('.katex-html');
+            if (!mathml || !htmlOut) continue;
+            var annotation = mathml.querySelector('annotation');
+            if (!annotation) continue;
+            var latex = annotation.textContent.trim();
+            if (!latex) continue;
+            try {
+              var isDisplay = /\\\\(int|frac|begin|sum|prod|latrix)/.test(latex);
+              htmlOut.innerHTML = katex.renderToString(latex, { displayMode: isDisplay });
+            } catch(e) {}
+          }
+        })();
+      `;
+      iframeDoc.head.appendChild(renderScript);
 
       const canvas = await html2canvas(tempContainer, {
         backgroundColor: bgColor,
