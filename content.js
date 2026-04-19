@@ -687,16 +687,16 @@
     document.getElementById('ds-selection-toolbar').classList.add('show');
     document.querySelector('.ds-screenshot-btn').style.display = 'none';
 
-    // Create overlays
+    // Create overlays (all selected by default)
     detectedBlocks.forEach((block, index) => {
-      addBlockOverlay(block, index);
+      addBlockOverlay(block, index, true);
     });
 
     updateSelectionCount();
     updateOverlayPositions();
     
-    // Add scroll listener (capture phase to catch all scroll events)
-    window.addEventListener('scroll', updateOverlayPositions, true);
+    // Add throttled scroll listener (rAF-batched to avoid blocking scroll)
+    window.addEventListener('scroll', scheduleOverlayUpdate, true);
     
     if (detectedBlocks[0]?.elements[0]) {
       detectedBlocks[0].elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -709,16 +709,16 @@
     detectedBlocks = [];
     selectedBlockIndices.clear();
 
-    window.removeEventListener('scroll', updateOverlayPositions, true);
+    window.removeEventListener('scroll', scheduleOverlayUpdate, true);
     document.getElementById('ds-selection-toolbar').classList.remove('show');
     document.querySelector('.ds-screenshot-btn').style.display = '';
     document.querySelectorAll('.ds-block-overlay').forEach(el => el.remove());
   }
 
   // Add overlay element
-  function addBlockOverlay(block, index) {
+  function addBlockOverlay(block, index, isSelected) {
     const overlay = document.createElement('div');
-    overlay.className = 'ds-block-overlay selected';
+    overlay.className = 'ds-block-overlay' + (isSelected ? ' selected' : '');
     overlay.dataset.index = index;
 
     const checkbox = document.createElement('div');
@@ -761,19 +761,35 @@
     };
   }
 
-  // Update overlay positions on scroll
+  // Throttled overlay position update using rAF.
+  // Without this, every scroll pixel triggers getBoundingClientRect() for every block,
+  // causing forced synchronous reflows that make scrolling extremely laggy.
+  let overlayRafPending = false;
+  function scheduleOverlayUpdate() {
+    if (overlayRafPending) return;
+    overlayRafPending = true;
+    requestAnimationFrame(() => {
+      overlayRafPending = false;
+      if (!isSelectionMode) return;
+      updateOverlayPositions();
+    });
+  }
+
+  // Update overlay positions on scroll.
+  // Uses transform: translate() for GPU-composited positioning.
+  // This avoids triggering layout (left/top changes) per frame —
+  // the compositor can move boxes independently of the main thread.
   function updateOverlayPositions() {
-    detectedBlocks.forEach((block, index) => {
-      const overlay = document.querySelector('.ds-block-overlay[data-index="' + index + '"]');
+    const overlays = document.querySelectorAll('.ds-block-overlay');
+    detectedBlocks.forEach((block, i) => {
+      const overlay = overlays[i];
       if (!overlay) return;
 
       const metrics = getOverlayMetrics(block);
 
-      overlay.style.position = 'fixed';
-      overlay.style.left = (metrics.left - 8) + 'px';
-      overlay.style.top = (metrics.top - 4) + 'px';
       overlay.style.width = (metrics.width + 16) + 'px';
       overlay.style.height = (metrics.height + 8) + 'px';
+      overlay.style.transform = 'translate(' + (metrics.left - 8) + 'px, ' + (metrics.top - 4) + 'px)';
     });
   }
 
@@ -863,13 +879,10 @@
     selectedBlockIndices = newSelected;
     mergeSelectedIndices.clear();
     
-    // Rebuild overlays
+    // Rebuild overlays (respect current selection state)
     document.querySelectorAll('.ds-block-overlay').forEach(el => el.remove());
     detectedBlocks.forEach((block, i) => {
-      addBlockOverlay(block, i);
-      if (selectedBlockIndices.has(i)) {
-        document.querySelector(`.ds-block-overlay[data-index="${i}"]`)?.classList.add('selected');
-      }
+      addBlockOverlay(block, i, selectedBlockIndices.has(i));
     });
     updateOverlayPositions();
     updateSelectionCount();
@@ -914,13 +927,10 @@
     selectedBlockIndices = newSelected;
     mergeSelectedIndices.clear();
     
-    // Rebuild overlays
+    // Rebuild overlays (respect current selection state)
     document.querySelectorAll('.ds-block-overlay').forEach(el => el.remove());
     detectedBlocks.forEach((block, i) => {
-      addBlockOverlay(block, i);
-      if (selectedBlockIndices.has(i)) {
-        document.querySelector(`.ds-block-overlay[data-index="${i}"]`)?.classList.add('selected');
-      }
+      addBlockOverlay(block, i, selectedBlockIndices.has(i));
     });
     updateOverlayPositions();
     updateSelectionCount();
@@ -994,21 +1004,90 @@
   // Skips html2canvas's CSS parsing hell by using only controlled styles.
   // ====================================================================
 
+  /**
+   * Check if a CSS color string (rgb/rgba) is "light" — i.e., would be hard
+   * to read on a light background.
+   */
+  function isLightColor(colorStr) {
+    const m = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!m) return false;
+    const lum = 0.299 * parseInt(m[1]) / 255 + 0.587 * parseInt(m[2]) / 255 + 0.114 * parseInt(m[3]) / 255;
+    return lum > 0.55;
+  }
+
+  /**
+   * Bake computed color styles from a source element tree onto a cloned element tree.
+   * Preserves syntax highlighting colors that would be lost when the clone is placed
+   * in a self-contained container with the `all: unset` CSS reset.
+   * Inline styles have the highest specificity, so they override `all: unset`.
+   *
+   * When isDarkTarget is false (light-mode screenshot), token colors that are
+   * designed for a dark background (e.g., light-pink keywords) are automatically
+   * remapped to dark equivalents suitable for a light background.
+   */
+  function bakeComputedColors(source, clone, isDarkTarget) {
+    if (source.nodeType !== Node.ELEMENT_NODE || clone.nodeType !== Node.ELEMENT_NODE) return;
+
+    const computedStyle = window.getComputedStyle(source);
+    const color = computedStyle.color;
+
+    if (isDarkTarget) {
+      // Dark target: bake colors as-is (source is also dark → colors are correct)
+      clone.style.color = color;
+    } else {
+      // Light target: if the source color is too light for a light bg, skip it
+      // so the pre's default dark text color takes over instead.
+      if (!isLightColor(color)) {
+        clone.style.color = color;
+      }
+      // If color IS light (designed for dark bg), don't bake →
+      // the element inherits pre's color (#24292f) which is readable.
+    }
+
+    // Also bake font-style and font-weight for syntax highlighting variations
+    // (e.g., italic comments, bold keywords)
+    if (computedStyle.fontStyle === 'italic') {
+      clone.style.fontStyle = 'italic';
+    }
+    const fw = computedStyle.fontWeight;
+    if (fw && fw !== 'normal' && fw !== '400') {
+      clone.style.fontWeight = fw;
+    }
+
+    // Recurse into children (parallel walk of source and clone DOM trees)
+    const srcKids = source.children;
+    const dstKids = clone.children;
+    const len = Math.min(srcKids.length, dstKids.length);
+    for (let i = 0; i < len; i++) {
+      bakeComputedColors(srcKids[i], dstKids[i], isDarkTarget);
+    }
+  }
+
   function buildSelfContainedContainer(block, targetWidth, bgColor) {
     const isDark = bgColor === '#1e1e1e';
     const isCode = isCodeBlock(block);
+    const hasKatex = needsKatex(block);
 
-    const outer = document.createElement('div');
-    Object.assign(outer.style, {
+    // Two-layer structure:
+    //   wrapper: off-screen positioning only (not passed to html-to-image)
+    //   inner: visual styles + content (this is what html-to-image renders)
+    // This avoids visibility:hidden or left:-10000px being serialized into SVG,
+    // which would produce a blank image.
+    const wrapper = document.createElement('div');
+    Object.assign(wrapper.style, {
       position: 'fixed',
       left: '-10000px',
       top: '0',
+      zIndex: '-1',
+    });
+
+    const inner = document.createElement('div');
+    Object.assign(inner.style, {
       width: targetWidth + 'px',
       background: bgColor,
       color: isDark ? '#e5e5e5' : '#1f2937',
       padding: '16px',
       boxSizing: 'border-box',
-      zIndex: '-1',
     });
 
     const style = document.createElement('style');
@@ -1043,9 +1122,9 @@
         font-family: "Fira Code", "Consolas", "Courier New", monospace;
       }
       .cs-content pre {
-        background: ${isDark ? '#111827' : '#1e1e1e'};
-        color: #d4d4d4;
-        padding: 14px 16px;
+        background: ${isDark ? '#111827' : '#f6f8fa'};
+        color: ${isDark ? '#d4d4d4' : '#24292f'};
+        padding: 10px 14px;
         border-radius: 8px;
         overflow-x: auto;
         white-space: pre-wrap;
@@ -1053,8 +1132,9 @@
         font-size: 13px;
         line-height: 1.7;
         font-family: "Fira Code", "Consolas", "Courier New", monospace;
-        margin: 0.5em 0;
+        margin: 0.2em 0;
         display: block;
+        border: ${isDark ? 'none' : '1px solid #d0d7de'};
       }
       .cs-content pre code {
         background: none;
@@ -1098,30 +1178,48 @@
         background: ${isDark ? '#1f2937' : '#f9fafb'};
         font-weight: 600;
       }
+      /* KaTeX support: override all:unset for .katex internal elements */
+      .cs-content .katex { all: revert; font-size: 1.1em; }
+      .cs-content .katex * { all: revert; box-sizing: border-box; }
+      .cs-content .katex-display { all: revert; margin: 0.5em 0; text-align: center; }
+      .cs-content .katex-display * { all: revert; box-sizing: border-box; }
     `;
 
     const content = document.createElement('div');
     content.className = 'cs-content';
 
     if (isCode) {
+      // Deep-clone the code element to preserve syntax highlighting spans,
+      // then bake computed colors into inline styles so they survive `all: unset`.
       const codeEl = block.elements[0]?.querySelector('code') || block.elements[0];
-      const codeText = codeEl?.textContent || '';
-      const pre = document.createElement('pre');
-      const code = document.createElement('code');
-      code.textContent = codeText;
-      pre.appendChild(code);
-      content.appendChild(pre);
+      if (codeEl) {
+        const clone = codeEl.cloneNode(true);
+        bakeComputedColors(codeEl, clone, isDark);
+        const pre = document.createElement('pre');
+        pre.appendChild(clone);
+        content.appendChild(pre);
+      }
     } else {
       for (const el of block.elements) {
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = el.innerHTML;
-        content.appendChild(wrapper);
+        const elWrapper = document.createElement('div');
+        elWrapper.innerHTML = el.innerHTML;
+        content.appendChild(elWrapper);
       }
     }
 
-    outer.appendChild(style);
-    outer.appendChild(content);
-    return outer;
+    inner.appendChild(style);
+    inner.appendChild(content);
+
+    // For KaTeX blocks, inject KaTeX CSS for proper math rendering
+    if (hasKatex) {
+      const katexLink = document.createElement('link');
+      katexLink.rel = 'stylesheet';
+      katexLink.href = chrome.runtime.getURL('lib/katex.min.css');
+      inner.insertBefore(katexLink, inner.firstChild);
+    }
+
+    wrapper.appendChild(inner);
+    return { wrapper, inner };
   }
 
   // ====================================================================
@@ -1183,6 +1281,7 @@
       await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
       const canvases = [];
+      const captureStart = performance.now();
       for (let i = 0; i < blocks.length; i++) {
         if (isCancelled) {
           showStatus('Cancelled', 'error');
@@ -1196,6 +1295,7 @@
         const canvas = await captureWithRetry(blocks[i], maxWidth);
         canvases.push(canvas);
       }
+      console.log('[ChatShot] TOTAL capture all blocks:', (performance.now() - captureStart).toFixed(0) + 'ms', '(' + blocks.length + ' blocks)');
 
       if (isCancelled) {
         showStatus('Cancelled', 'error');
@@ -1502,156 +1602,91 @@
     }
   }
 
-  // ====== Router: self-contained container vs iframe clone ======
+  // ====== XML illegal character sanitization ======
+  // html-to-image uses SVG foreignObject, which serializes DOM to XML.
+  // Control characters \x00-\x08 etc. are valid in HTML but illegal in XML 1.0,
+  // causing silent rendering failure. Strip them before capture.
+  const XML_ILLEGAL_CONTROL_CHAR_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+
+  function stripXmlIllegalChars(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (XML_ILLEGAL_CONTROL_CHAR_RE.test(node.nodeValue)) {
+        node.nodeValue = node.nodeValue.replace(XML_ILLEGAL_CONTROL_CHAR_RE, '');
+      }
+      return;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      for (let i = 0; i < node.childNodes.length; i++) {
+        stripXmlIllegalChars(node.childNodes[i]);
+      }
+    }
+  }
+
+  // ====== Router: all blocks → self-contained container ======
+  // html-to-image uses SVG foreignObject — no CSS isolation needed.
+  // All blocks (text, code, table, KaTeX) go through the same fast path.
   async function captureBlock(block, targetWidth = 800) {
     if (!detectedBgColor) detectedBgColor = detectThemeBackground();
     const bgColor = detectedBgColor;
-
-    // Text/code blocks WITHOUT KaTeX → self-contained container (fast path)
-    if ((isTextBlock(block) || isCodeBlock(block)) && !needsKatex(block)) {
-      return captureWithSelfContainer(block, targetWidth, bgColor);
-    }
-    // Table blocks, KaTeX blocks, or any fallback → iframe clone (slow but accurate)
-    return captureWithIframe(block, targetWidth, bgColor);
+    return captureWithSelfContainer(block, targetWidth, bgColor);
   }
 
   // ====== Fast path: self-contained container ======
   async function captureWithSelfContainer(block, targetWidth, bgColor) {
-    const container = buildSelfContainedContainer(block, targetWidth, bgColor);
-    document.body.appendChild(container);
+    const t0 = performance.now();
+    const { wrapper, inner } = buildSelfContainedContainer(block, targetWidth, bgColor);
+    document.body.appendChild(wrapper);
+    console.log('[ChatShot] buildSelfContainedContainer:', (performance.now() - t0).toFixed(0) + 'ms');
 
     try {
-      // Inline all images before rendering (see Step 2)
-      await inlineAllImages(container);
+      // Inline all images before rendering
+      const t1 = performance.now();
+      await inlineAllImages(inner);
+      console.log('[ChatShot] inlineAllImages:', (performance.now() - t1).toFixed(0) + 'ms');
 
-      const canvas = await html2canvas(container, {
+      // Sanitize XML-illegal control chars for SVG foreignObject serialization
+      const t2 = performance.now();
+      stripXmlIllegalChars(inner);
+      console.log('[ChatShot] stripXmlIllegalChars:', (performance.now() - t2).toFixed(0) + 'ms');
+
+      // html-to-image: SVG foreignObject approach — much faster than html2canvas
+      // Pass 'inner' (not 'wrapper') to avoid left:-10000px being serialized.
+      // skipFonts avoids SecurityError when reading cross-origin styleSheets.
+      // onclone removes external stylesheets from the cloned DOM.
+      const t3 = performance.now();
+      const blob = await htmlToImage.toBlob(inner, {
         backgroundColor: bgColor,
-        scale: 1,
-        useCORS: true,
-        allowTaint: false,
-        foreignObjectRendering: false,
-        removeContainer: false,
-        logging: false,
+        pixelRatio: 1,
+        skipFonts: true,
+        onclone: (clonedDoc, clonedEl) => {
+          // Remove all external stylesheets from the cloned document.
+          // Our self-contained container has its own <style> with all needed rules.
+          // External sheets cause SecurityError when html-to-image tries to
+          // read their cssRules for inlining, and we don't need them anyway.
+          const sheets = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
+          sheets.forEach(s => s.remove());
+        },
       });
+      console.log('[ChatShot] htmlToImage.toBlob:', (performance.now() - t3).toFixed(0) + 'ms');
+      if (!blob) throw new Error('html-to-image returned null blob');
+
+      // Convert blob to canvas for stitching compatibility
+      const t4 = performance.now();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      console.log('[ChatShot] createImageBitmap+draw:', (performance.now() - t4).toFixed(0) + 'ms');
+      console.log('[ChatShot] TOTAL captureWithSelfContainer:', (performance.now() - t0).toFixed(0) + 'ms');
       return canvas;
     } finally {
-      container.remove();
+      wrapper.remove();
     }
   }
 
-  // ====== Slow path: iframe clone (existing logic, preserved for tables/KaTeX) ======
-  // Process: clone elements -> copy inline styles -> render in isolated iframe -> html2canvas
-  // The iframe isolates html2canvas from the host page's CSS which may contain
-  // unsupported color functions (lab, oklch, etc.) that crash html2canvas's parser.
-  async function captureWithIframe(block, targetWidth = 800, bgColor) {
-    if (!bgColor) bgColor = detectThemeBackground();
-    const tableBlock = isTableBlock(block);
-
-    const tempContainer = document.createElement('div');
-    tempContainer.style.cssText =
-      'background: ' + bgColor + '; padding: 16px;' +
-      'width: ' + targetWidth + 'px; min-width: ' + targetWidth + 'px;' +
-      'max-width: ' + targetWidth + 'px;' +
-      'text-align: left; overflow: ' + (tableBlock ? 'visible' : 'hidden') + ';';
-
-    const contentRoot = createCaptureContentRoot(block, tempContainer);
-
-    for (const el of block.elements) {
-      const clone = el.cloneNode(true);
-      copyElementStyles(el, clone, 0);
-      if (tableBlock && isTableLikeElement(el)) {
-        preserveTableLayoutStyles(el, clone);
-      } else {
-        clone.style.width = '100%';
-      }
-      clone.style.boxSizing = 'border-box';
-      contentRoot.appendChild(clone);
-    }
-
-    contentRoot.querySelectorAll('pre, .md-code-block, .ds-scroll-area').forEach(pre => {
-      pre.style.width = '100%';
-      pre.style.maxWidth = '100%';
-      pre.style.overflow = 'hidden';
-      pre.style.boxSizing = 'border-box';
-    });
-
-    if (tableBlock) {
-      normalizeTableCloneLayout(contentRoot);
-    }
-
-    // Render inside an isolated iframe so html2canvas only sees our filtered CSS,
-    // not the host page's stylesheets that may contain unsupported color functions.
-    const iframe = document.createElement('iframe');
-    iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:' +
-      (targetWidth + 64) + 'px;height:10000px;border:none;visibility:hidden;';
-    document.body.appendChild(iframe);
-
-    try {
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-      iframeDoc.open();
-      iframeDoc.write('<!DOCTYPE html><html><head></head><body style="margin:0;padding:0;"></body></html>');
-      iframeDoc.close();
-
-      // Inject KaTeX into the iframe for math formula rendering.
-      const katexScript = iframeDoc.createElement('script');
-      katexScript.src = chrome.runtime.getURL('lib/katex.min.js');
-      iframeDoc.head.appendChild(katexScript);
-
-      const katexCss = iframeDoc.createElement('link');
-      katexCss.rel = 'stylesheet';
-      katexCss.href = chrome.runtime.getURL('lib/katex.min.css');
-      iframeDoc.head.appendChild(katexCss);
-
-      await new Promise((resolve, reject) => {
-        katexScript.onload = resolve;
-        katexScript.onerror = reject;
-      });
-
-      // Inject only our filtered page CSS (no lab/oklch/etc.)
-      copyComputedStyles(iframeDoc.body);
-      iframeDoc.body.appendChild(tempContainer);
-
-      // Re-render KaTeX formulas before html2canvas
-      const renderScript = iframeDoc.createElement('script');
-      renderScript.textContent = `
-        (function() {
-          if (typeof katex === 'undefined') return;
-          var katexEls = document.querySelectorAll('.katex');
-          for (var i = 0; i < katexEls.length; i++) {
-            var el = katexEls[i];
-            var mathml = el.querySelector('.katex-mathml');
-            var htmlOut = el.querySelector('.katex-html');
-            if (!mathml || !htmlOut) continue;
-            var annotation = mathml.querySelector('annotation');
-            if (!annotation) continue;
-            var latex = annotation.textContent.trim();
-            if (!latex) continue;
-            try {
-              var isDisplay = /\\\\(int|frac|begin|sum|prod|latrix)/.test(latex);
-              htmlOut.innerHTML = katex.renderToString(latex, { displayMode: isDisplay });
-            } catch(e) {}
-          }
-        })();
-      `;
-      iframeDoc.head.appendChild(renderScript);
-
-      // Inline images for iframe path too
-      await inlineAllImages(tempContainer);
-
-      const canvas = await html2canvas(tempContainer, {
-        backgroundColor: bgColor,
-        scale: 1,
-        useCORS: true,
-        allowTaint: true,
-        foreignObjectRendering: false,
-        removeContainer: true,
-        logging: false
-      });
-      return canvas;
-    } finally {
-      iframe.remove();
-    }
-  }
 
   // ====================================================================
   // SECTION: Style Copying

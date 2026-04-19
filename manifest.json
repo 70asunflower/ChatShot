@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatShot",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Capture AI chat responses as screenshots and stitch them for easy sharing",
   "permissions": ["activeTab", "clipboardWrite"],
   "background": {
@@ -23,13 +23,13 @@
         "https://chatglm.cn/*",
         "https://copilot.microsoft.com/*"
       ],
-      "js": ["lib/html2canvas.min.js", "content.js"],
+      "js": ["lib/html-to-image.js", "content.js"],
       "css": ["content.css"]
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["logos/*.png", "lib/katex.min.js", "lib/katex.min.css"],
+      "resources": ["logos/*.png", "lib/katex.min.js", "lib/katex.min.css", "lib/html-to-image.js"],
       "matches": ["<all_urls>"]
     }
   ]
