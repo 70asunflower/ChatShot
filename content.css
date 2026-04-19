@@ -124,9 +124,10 @@
   white-space: nowrap;
 }
 
-/* Fixed width for H and V buttons */
+/* Fixed width for H, V, and C buttons */
 #ds-capture-h,
-#ds-capture-v {
+#ds-capture-v,
+#ds-capture-c {
   width: 48px;
   padding: 10px 0;
   text-align: center;
@@ -290,21 +291,19 @@
   background: rgba(239, 68, 68, 0.3);
 }
 
-/* Block overlay */
+/* Block overlay — positioned via transform for GPU-composited scrolling */
 .ds-block-overlay {
-  position: absolute;
+  position: fixed;
+  left: 0;
+  top: 0;
   z-index: 999;
   border: 2px dashed rgba(156, 163, 175, 0.5);
   border-radius: 8px;
   cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
   background: rgba(0, 0, 0, 0.1);
-  /* GPU acceleration for smooth scrolling */
+  /* GPU-accelerated positioning: width/height stay on main thread,
+     transform moves the box on the compositor thread — no layout per scroll frame */
   will-change: transform;
-  transform: translateZ(0);
-  contain: layout style;
   pointer-events: auto;
 }
 
