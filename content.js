@@ -537,9 +537,9 @@
         <div id="ds-response-list" class="ds-response-list"></div>
       </div>
       <div class="ds-screenshot-buttons">
-        <button id="ds-capture-h" title="Horizontal stitch">H</button>
-        <button id="ds-capture-v" title="Vertical stitch">V</button>
-        <button id="ds-capture-c" title="Copy as image">C</button>
+        <button id="ds-capture-h" title="Horizontal stitch"><span class="ds-btn-icon">↔</span><span class="ds-btn-label">H</span></button>
+        <button id="ds-capture-v" title="Vertical stitch"><span class="ds-btn-icon">↕</span><span class="ds-btn-label">V</span></button>
+        <button id="ds-capture-c" title="Copy as image"><span class="ds-btn-icon">📋</span><span class="ds-btn-label">C</span></button>
       </div>
       <div class="ds-screenshot-status" id="ds-status"></div>
     `;
@@ -550,11 +550,16 @@
     toolbar.id = 'ds-selection-toolbar';
     toolbar.className = 'ds-selection-toolbar';
     toolbar.innerHTML = `
-      <span id="ds-selection-count">Selected: 0/0</span>
-      <button id="ds-select-all">All</button>
-      <button id="ds-select-none">None</button>
+      <div class="ds-selection-count">
+        <span class="ds-selection-count-label">Selected</span>
+        <span class="ds-selection-count-value" id="ds-selection-count">0/0</span>
+      </div>
+      <button id="ds-select-all" class="ds-btn-ghost">All</button>
+      <button id="ds-select-none" class="ds-btn-ghost">None</button>
+      <div class="ds-toolbar-separator"></div>
       <button id="ds-merge-blocks" title="Ctrl+click blocks to select, then merge">Merge</button>
       <button id="ds-unmerge-block" title="Unmerge selected merged block">Unmerge</button>
+      <div class="ds-toolbar-separator"></div>
       <button id="ds-confirm-capture">Capture</button>
       <button id="ds-cancel-selection">Cancel</button>
     `;
@@ -684,7 +689,14 @@
     isSelectionMode = true;
     selectedBlockIndices = new Set(detectedBlocks.map((_, i) => i));
 
-    document.getElementById('ds-selection-toolbar').classList.add('show');
+    const toolbar = document.getElementById('ds-selection-toolbar');
+    toolbar.classList.add('show');
+    // Trigger slide-in animation on next frame
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        toolbar.classList.add('visible');
+      });
+    });
     document.querySelector('.ds-screenshot-btn').style.display = 'none';
 
     // Create overlays (all selected by default)
@@ -710,6 +722,7 @@
     selectedBlockIndices.clear();
 
     window.removeEventListener('scroll', scheduleOverlayUpdate, true);
+    document.getElementById('ds-selection-toolbar').classList.remove('visible');
     document.getElementById('ds-selection-toolbar').classList.remove('show');
     document.querySelector('.ds-screenshot-btn').style.display = '';
     document.querySelectorAll('.ds-block-overlay').forEach(el => el.remove());
@@ -973,7 +986,7 @@
 
   function updateSelectionCount() {
     document.getElementById('ds-selection-count').textContent = 
-      `Selected: ${selectedBlockIndices.size}/${detectedBlocks.length}`;
+      `${selectedBlockIndices.size}/${detectedBlocks.length}`;
   }
 
   // ====================================================================
