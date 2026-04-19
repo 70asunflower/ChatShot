@@ -3,7 +3,10 @@
   "name": "ChatShot",
   "version": "1.0.3",
   "description": "Capture AI chat responses as screenshots and stitch them for easy sharing",
-  "permissions": ["activeTab"],
+  "permissions": ["activeTab", "clipboardWrite"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "icons": {
     "128": "icons/icon128.png"
   },

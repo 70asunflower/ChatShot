@@ -539,6 +539,7 @@
       <div class="ds-screenshot-buttons">
         <button id="ds-capture-h" title="Horizontal stitch">H</button>
         <button id="ds-capture-v" title="Vertical stitch">V</button>
+        <button id="ds-capture-c" title="Copy as image">C</button>
       </div>
       <div class="ds-screenshot-status" id="ds-status"></div>
     `;
@@ -562,6 +563,7 @@
     // Bind events
     document.getElementById('ds-capture-h').addEventListener('click', () => enterSelectionMode('horizontal'));
     document.getElementById('ds-capture-v').addEventListener('click', () => enterSelectionMode('vertical'));
+    document.getElementById('ds-capture-c').addEventListener('click', () => enterSelectionMode('copy'));
     document.getElementById('ds-selector-btn').addEventListener('click', toggleResponseList);
     document.getElementById('ds-confirm-capture').addEventListener('click', confirmCapture);
     document.getElementById('ds-cancel-selection').addEventListener('click', exitSelectionMode);
@@ -965,6 +967,164 @@
   }
 
   // ====================================================================
+  // SECTION: Block Type Classification
+  // Determines whether a block can use the self-contained container
+  // (fast path) or must fall back to the iframe clone approach.
+  // ====================================================================
+
+  function isTextBlock(block) {
+    if (block.type === 'table' || block.type === 'code') return false;
+    if (block.type === 'merged' && block.originalBlocks) {
+      return block.originalBlocks.every(b => isTextBlock(b));
+    }
+    return block.type === 'section' || block.type === 'default' || block.type === 'paragraph';
+  }
+
+  function isCodeBlock(block) {
+    return block.type === 'code';
+  }
+
+  function needsKatex(block) {
+    return block.elements.some(el => el.querySelector?.('.katex'));
+  }
+
+  // ====================================================================
+  // SECTION: Self-Contained Container Renderer
+  // Builds a clean, self-styled DOM container from block innerHTML.
+  // Skips html2canvas's CSS parsing hell by using only controlled styles.
+  // ====================================================================
+
+  function buildSelfContainedContainer(block, targetWidth, bgColor) {
+    const isDark = bgColor === '#1e1e1e';
+    const isCode = isCodeBlock(block);
+
+    const outer = document.createElement('div');
+    Object.assign(outer.style, {
+      position: 'fixed',
+      left: '-10000px',
+      top: '0',
+      width: targetWidth + 'px',
+      background: bgColor,
+      color: isDark ? '#e5e5e5' : '#1f2937',
+      padding: '16px',
+      boxSizing: 'border-box',
+      zIndex: '-1',
+    });
+
+    const style = document.createElement('style');
+    style.textContent = `
+      /* Reset: strip all host page class styles */
+      .cs-content * { all: unset; display: revert; box-sizing: border-box; }
+      .cs-content {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        font-size: 15px;
+        line-height: 1.75;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        color: ${isDark ? '#e5e5e5' : '#1f2937'};
+      }
+      .cs-content h1 { font-size: 1.6em; font-weight: 700; margin: 0.6em 0 0.3em; display: block; }
+      .cs-content h2 { font-size: 1.4em; font-weight: 700; margin: 0.6em 0 0.3em; display: block; }
+      .cs-content h3 { font-size: 1.2em; font-weight: 600; margin: 0.5em 0 0.25em; display: block; }
+      .cs-content h4 { font-size: 1.1em; font-weight: 600; margin: 0.4em 0 0.2em; display: block; }
+      .cs-content p  { margin: 0.4em 0; display: block; }
+      .cs-content ul, .cs-content ol { padding-left: 1.5em; margin: 0.3em 0; display: block; }
+      .cs-content li { margin: 0.15em 0; display: list-item; }
+      .cs-content li > p { margin: 0.1em 0; }
+      .cs-content strong { font-weight: 700; }
+      .cs-content em { font-style: italic; }
+      .cs-content a { color: #6366f1; text-decoration: underline; }
+      .cs-content code:not(pre code) {
+        background: ${isDark ? '#374151' : '#f3f4f6'};
+        color: ${isDark ? '#e5e5e5' : '#1f2937'};
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.88em;
+        font-family: "Fira Code", "Consolas", "Courier New", monospace;
+      }
+      .cs-content pre {
+        background: ${isDark ? '#111827' : '#1e1e1e'};
+        color: #d4d4d4;
+        padding: 14px 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 13px;
+        line-height: 1.7;
+        font-family: "Fira Code", "Consolas", "Courier New", monospace;
+        margin: 0.5em 0;
+        display: block;
+      }
+      .cs-content pre code {
+        background: none;
+        padding: 0;
+        border-radius: 0;
+        font-size: inherit;
+        color: inherit;
+      }
+      .cs-content blockquote {
+        border-left: 3px solid #6366f1;
+        padding-left: 12px;
+        margin: 0.5em 0;
+        color: ${isDark ? '#9ca3af' : '#6b7280'};
+        display: block;
+      }
+      .cs-content hr {
+        border: none;
+        border-top: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
+        margin: 1em 0;
+        display: block;
+      }
+      .cs-content img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 8px 0;
+        border-radius: 6px;
+      }
+      .cs-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.5em 0;
+        font-size: 0.9em;
+      }
+      .cs-content th, .cs-content td {
+        border: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
+        padding: 8px 12px;
+        text-align: left;
+      }
+      .cs-content th {
+        background: ${isDark ? '#1f2937' : '#f9fafb'};
+        font-weight: 600;
+      }
+    `;
+
+    const content = document.createElement('div');
+    content.className = 'cs-content';
+
+    if (isCode) {
+      const codeEl = block.elements[0]?.querySelector('code') || block.elements[0];
+      const codeText = codeEl?.textContent || '';
+      const pre = document.createElement('pre');
+      const code = document.createElement('code');
+      code.textContent = codeText;
+      pre.appendChild(code);
+      content.appendChild(pre);
+    } else {
+      for (const el of block.elements) {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = el.innerHTML;
+        content.appendChild(wrapper);
+      }
+    }
+
+    outer.appendChild(style);
+    outer.appendChild(content);
+    return outer;
+  }
+
+  // ====================================================================
   // SECTION: Capture Pipeline
   // Flow: confirmCapture -> doCapture -> captureBlock (per block) -> stitch -> download
   // ====================================================================
@@ -985,8 +1145,10 @@
   async function doCapture(blocks, mode) {
     const btnH = document.getElementById('ds-capture-h');
     const btnV = document.getElementById('ds-capture-v');
+    const btnC = document.getElementById('ds-capture-c');
     btnH.disabled = true;
     btnV.disabled = true;
+    btnC.disabled = true;
 
     detectedBgColor = null;
     isCancelled = false;
@@ -1031,7 +1193,7 @@
         // Allow UI to update between captures
         await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
         
-        const canvas = await captureBlock(blocks[i], maxWidth);
+        const canvas = await captureWithRetry(blocks[i], maxWidth);
         canvases.push(canvas);
       }
 
@@ -1057,16 +1219,20 @@
       }
       canvases.length = 0;
 
-      await downloadImage(finalCanvas);
-      
-      // Free final canvas after download
-      finalCanvas.width = 0;
-      finalCanvas.height = 0;
-      
-      // Clear CSS cache to free memory
-      cachedCssText = null;
-      
-      showStatus('Done!', 'success');
+      if (mode === 'copy') {
+        try {
+          await copyImageToClipboard(finalCanvas);
+          showStatus('Copied to clipboard!', 'success');
+        } catch (e) {
+          // Clipboard API not supported, fallback to download
+          console.warn('[ChatShot] Clipboard failed:', e);
+          await downloadImage(finalCanvas);
+          showStatus('Clipboard not supported, downloaded instead', 'info');
+        }
+      } else {
+        await downloadImage(finalCanvas);
+        showStatus('Done!', 'success');
+      }
 
     } catch (error) {
       console.error('[ChatShot] Error:', error);
@@ -1074,6 +1240,7 @@
     } finally {
       btnH.disabled = false;
       btnV.disabled = false;
+      btnC.disabled = false;
       // Remove cancel button
       const cancelEl = document.getElementById('ds-capture-cancel');
       if (cancelEl) cancelEl.remove();
@@ -1260,13 +1427,124 @@
     });
   }
 
-  // Capture a single block to a <canvas>.
-  // Process: clone elements -> copy inline styles -> render in isolated iframe -> html2canvas
-  // The iframe isolates html2canvas from the host page's CSS which may contain
-  // unsupported color functions (lab, oklch, etc.) that crash html2canvas's parser.
+  // ====== Image Inline ======
+  function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('blobToDataURL failed'));
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function inlineAllImages(container) {
+    const imgs = Array.from(container.querySelectorAll('img'));
+    if (imgs.length === 0) return;
+
+    await Promise.all(imgs.map(async (img) => {
+      let src = img.getAttribute('src') || '';
+      if (!src || src.startsWith('data:')) return;
+
+      if (src.startsWith('//')) src = 'https:' + src;
+      if (!/^https?:\/\//i.test(src)) return;
+
+      // Strategy 1: content script direct fetch
+      try {
+        const resp = await fetch(src, { mode: 'cors', credentials: 'include' });
+        if (resp.ok) {
+          const blob = await resp.blob();
+          const dataUrl = await blobToDataURL(blob);
+          if (dataUrl) { img.src = dataUrl; return; }
+        }
+      } catch { /* CORS failed, try strategy 2 */ }
+
+      // Strategy 2: fetch via background script to bypass CORS
+      try {
+        const result = await new Promise((resolve) => {
+          try {
+            chrome.runtime.sendMessage({ type: 'fetchImage', url: src }, (resp) => {
+              resolve(resp);
+            });
+          } catch { resolve(null); }
+        });
+        if (result && result.ok && result.base64) {
+          const contentType = result.contentType || 'image/png';
+          img.src = 'data:' + contentType + ';base64,' + result.base64;
+          return;
+        }
+      } catch { /* All strategies failed, keep original src */ }
+    }));
+
+    // Wait for all images to decode
+    await Promise.all(imgs.map(img =>
+      (typeof img.decode === 'function' ? img.decode() : Promise.resolve()).catch(() => {})
+    ));
+  }
+
+  // ====== Retry wrapper for capture ======
+  const MAX_CAPTURE_RETRIES = 3;
+  const RETRY_DELAY_MS = 300;
+
+  async function captureWithRetry(block, targetWidth, maxRetries) {
+    if (maxRetries === undefined) maxRetries = MAX_CAPTURE_RETRIES;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await captureBlock(block, targetWidth);
+      } catch (err) {
+        if (attempt === maxRetries - 1) throw err;
+        var msg = (err && err.message || '').toLowerCase();
+        if (/image|decode|network|load|taint/.test(msg)) {
+          await new Promise(function(r) { setTimeout(r, RETRY_DELAY_MS); });
+          continue;
+        }
+        throw err; // non-retryable error
+      }
+    }
+  }
+
+  // ====== Router: self-contained container vs iframe clone ======
   async function captureBlock(block, targetWidth = 800) {
     if (!detectedBgColor) detectedBgColor = detectThemeBackground();
     const bgColor = detectedBgColor;
+
+    // Text/code blocks WITHOUT KaTeX → self-contained container (fast path)
+    if ((isTextBlock(block) || isCodeBlock(block)) && !needsKatex(block)) {
+      return captureWithSelfContainer(block, targetWidth, bgColor);
+    }
+    // Table blocks, KaTeX blocks, or any fallback → iframe clone (slow but accurate)
+    return captureWithIframe(block, targetWidth, bgColor);
+  }
+
+  // ====== Fast path: self-contained container ======
+  async function captureWithSelfContainer(block, targetWidth, bgColor) {
+    const container = buildSelfContainedContainer(block, targetWidth, bgColor);
+    document.body.appendChild(container);
+
+    try {
+      // Inline all images before rendering (see Step 2)
+      await inlineAllImages(container);
+
+      const canvas = await html2canvas(container, {
+        backgroundColor: bgColor,
+        scale: 1,
+        useCORS: true,
+        allowTaint: false,
+        foreignObjectRendering: false,
+        removeContainer: false,
+        logging: false,
+      });
+      return canvas;
+    } finally {
+      container.remove();
+    }
+  }
+
+  // ====== Slow path: iframe clone (existing logic, preserved for tables/KaTeX) ======
+  // Process: clone elements -> copy inline styles -> render in isolated iframe -> html2canvas
+  // The iframe isolates html2canvas from the host page's CSS which may contain
+  // unsupported color functions (lab, oklch, etc.) that crash html2canvas's parser.
+  async function captureWithIframe(block, targetWidth = 800, bgColor) {
+    if (!bgColor) bgColor = detectThemeBackground();
     const tableBlock = isTableBlock(block);
 
     const tempContainer = document.createElement('div');
@@ -1315,8 +1593,6 @@
       iframeDoc.close();
 
       // Inject KaTeX into the iframe for math formula rendering.
-      // Use chrome.runtime.getURL() so the extension's local lib files are accessible
-      // from within the iframe, bypassing the extension's CSP which blocks external CDN scripts.
       const katexScript = iframeDoc.createElement('script');
       katexScript.src = chrome.runtime.getURL('lib/katex.min.js');
       iframeDoc.head.appendChild(katexScript);
@@ -1326,7 +1602,6 @@
       katexCss.href = chrome.runtime.getURL('lib/katex.min.css');
       iframeDoc.head.appendChild(katexCss);
 
-      // Wait for KaTeX to be available in the iframe context
       await new Promise((resolve, reject) => {
         katexScript.onload = resolve;
         katexScript.onerror = reject;
@@ -1336,9 +1611,7 @@
       copyComputedStyles(iframeDoc.body);
       iframeDoc.body.appendChild(tempContainer);
 
-      // Inject a script into the iframe that re-renders all KaTeX formulas
-      // BEFORE html2canvas processes the DOM. This script runs inside the iframe's
-      // own context where the katex global is available from the CDN we loaded.
+      // Re-render KaTeX formulas before html2canvas
       const renderScript = iframeDoc.createElement('script');
       renderScript.textContent = `
         (function() {
@@ -1361,6 +1634,9 @@
         })();
       `;
       iframeDoc.head.appendChild(renderScript);
+
+      // Inline images for iframe path too
+      await inlineAllImages(tempContainer);
 
       const canvas = await html2canvas(tempContainer, {
         backgroundColor: bgColor,
@@ -1623,19 +1899,41 @@
       String(now.getDate()).padStart(2,'0') + '_' + String(now.getHours()).padStart(2,'0') +
       String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
     const platformName = currentAdapter?.name || 'chatshot';
-    const filename = `${platformName}_${ts}.png`;
-    try {
+    const filename = platformName + '_' + ts + '.png';
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        console.error('[ChatShot] toBlob returned null');
+        showStatus('Error: Failed to generate image', 'error');
+        return;
+      }
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
+      a.href = url;
       a.download = filename;
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-    } catch (e) {
-      console.error('[ChatShot] Download failed:', e);
-      showStatus('Error: Failed to download', 'error');
-    }
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    }, 'image/png');
+  }
+
+  async function copyImageToClipboard(canvas) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(async (blob) => {
+        if (!blob) { reject(new Error('toBlob failed')); return; }
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      }, 'image/png');
+    });
   }
 
   if (document.readyState === 'loading') {

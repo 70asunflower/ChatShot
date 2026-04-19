@@ -124,9 +124,10 @@
   white-space: nowrap;
 }
 
-/* Fixed width for H and V buttons */
+/* Fixed width for H, V, and C buttons */
 #ds-capture-h,
-#ds-capture-v {
+#ds-capture-v,
+#ds-capture-c {
   width: 48px;
   padding: 10px 0;
   text-align: center;
