@@ -1103,103 +1103,35 @@
       boxSizing: 'border-box',
     });
 
+    // Minimal style overrides — no all:unset! The deep-cloned elements keep
+    // their host-page classes and DOM structure. In onclone we inline all
+    // same-origin stylesheets as <style> tags so html-to-image can read them
+    // without SecurityError, and only remove cross-origin <link> tags.
     const style = document.createElement('style');
     style.textContent = `
-      /* Reset: strip all host page class styles, except KaTeX and SVG internals */
-      .cs-content *:not(.katex):not(.katex *):not(svg):not(svg *) { all: unset; display: revert; box-sizing: border-box; }
       .cs-content {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
         font-size: 15px;
         line-height: 1.75;
+        color: ${isDark ? '#e5e5e5' : '#1f2937'};
         word-break: break-word;
         overflow-wrap: break-word;
-        color: ${isDark ? '#e5e5e5' : '#1f2937'};
-      }
-      .cs-content h1 { font-size: 1.6em; font-weight: 700; margin: 0.6em 0 0.3em; display: block; }
-      .cs-content h2 { font-size: 1.4em; font-weight: 700; margin: 0.6em 0 0.3em; display: block; }
-      .cs-content h3 { font-size: 1.2em; font-weight: 600; margin: 0.5em 0 0.25em; display: block; }
-      .cs-content h4 { font-size: 1.1em; font-weight: 600; margin: 0.4em 0 0.2em; display: block; }
-      .cs-content p  { margin: 0.4em 0; display: block; }
-      .cs-content ul, .cs-content ol { padding-left: 1.5em; margin: 0.3em 0; display: block; }
-      .cs-content li { margin: 0.15em 0; display: list-item; }
-      .cs-content li > p { margin: 0.1em 0; }
-      .cs-content strong { font-weight: 700; }
-      .cs-content em { font-style: italic; }
-      .cs-content a { color: #6366f1; text-decoration: underline; }
-      .cs-content code:not(pre code) {
-        background: ${isDark ? '#374151' : '#f3f4f6'};
-        color: ${isDark ? '#e5e5e5' : '#1f2937'};
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 0.88em;
-        font-family: "Fira Code", "Consolas", "Courier New", monospace;
       }
       .cs-content pre {
-        background: ${isDark ? '#111827' : '#f6f8fa'};
-        color: ${isDark ? '#d4d4d4' : '#24292f'};
-        padding: 10px 14px;
-        border-radius: 8px;
-        overflow-x: auto;
         white-space: pre;
-        font-size: 13px;
-        line-height: 1.7;
-        font-family: "Fira Code", "Consolas", "Courier New", monospace;
-        margin: 0.2em 0;
-        display: block;
-        border: ${isDark ? 'none' : '1px solid #d0d7de'};
+        overflow-x: auto;
       }
       .cs-content pre code {
-        background: none;
-        padding: 0;
-        border-radius: 0;
-        font-size: inherit;
-        color: inherit;
         white-space: inherit;
       }
-      .cs-content blockquote {
-        border-left: 3px solid #6366f1;
-        padding-left: 12px;
-        margin: 0.5em 0;
-        color: ${isDark ? '#9ca3af' : '#6b7280'};
-        display: block;
-      }
-      .cs-content hr {
-        border: none;
-        border-top: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
-        margin: 1em 0;
-        display: block;
+      .cs-content table {
+        border-collapse: collapse;
+        width: 100%;
       }
       .cs-content img {
         max-width: 100%;
         height: auto;
-        display: block;
-        margin: 8px 0;
-        border-radius: 6px;
       }
-      .cs-content table {
-        width: 100%;
-        border-collapse: collapse;
-        border-spacing: 0;
-        margin: 0.5em 0;
-        font-size: 0.9em;
-        display: table;
-      }
-      .cs-content thead { display: table-header-group; }
-      .cs-content tbody { display: table-row-group; }
-      .cs-content tr { display: table-row; }
-      .cs-content th, .cs-content td {
-        border: 1px solid ${isDark ? '#4b5563' : '#d1d5db'};
-        padding: 8px 12px;
-        text-align: left;
-        display: table-cell;
-      }
-      .cs-content th {
-        background: ${isDark ? '#1f2937' : '#f9fafb'};
-        font-weight: 600;
-      }
-      /* SVG / Mermaid: preserve computed styles from host page */
-      .cs-content svg { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
-      .cs-content svg text { font-family: sans-serif; }
     `;
 
     const content = document.createElement('div');
@@ -1207,7 +1139,7 @@
 
     if (isCode) {
       // Deep-clone the code element to preserve syntax highlighting spans,
-      // then bake computed colors into inline styles so they survive `all: unset`.
+      // then bake computed colors into inline styles.
       const codeEl = block.elements[0]?.querySelector('code') || block.elements[0];
       if (codeEl) {
         const clone = codeEl.cloneNode(true);
@@ -1217,10 +1149,11 @@
         content.appendChild(pre);
       }
     } else {
+      // Deep-clone each element to preserve full DOM structure, classes,
+      // and nesting. This keeps ol/ul, blockquote, table, KaTeX, SVG
+      // all working with their host-page CSS.
       for (const el of block.elements) {
-        const elWrapper = document.createElement('div');
-        elWrapper.innerHTML = el.innerHTML;
-        content.appendChild(elWrapper);
+        content.appendChild(el.cloneNode(true));
       }
     }
 
@@ -1691,10 +1624,27 @@
         pixelRatio: 1,
         skipFonts: true,
         onclone: (clonedDoc, clonedEl) => {
-          // Remove all external stylesheets from the cloned document.
-          // Our self-contained container has its own <style> with all needed rules.
-          // External sheets cause SecurityError when html-to-image tries to
-          // read their cssRules for inlining, and we don't need them anyway.
+          // Collect all same-origin CSS rules and inline them as a single <style>.
+          // Cross-origin stylesheets cannot be read (cssRules throws SecurityError),
+          // so we skip those — the deep-cloned elements carry computed styles as fallback.
+          // Then remove all <link> tags so html-to-image doesn't try to read them.
+          let cssText = '';
+          for (const sheet of document.styleSheets) {
+            try {
+              // If cssRules is readable, it's same-origin
+              for (const rule of sheet.cssRules) {
+                cssText += rule.cssText + '\n';
+              }
+            } catch (e) {
+              // SecurityError: cross-origin, skip
+            }
+          }
+          if (cssText) {
+            const inlinedStyle = clonedDoc.createElement('style');
+            inlinedStyle.textContent = cssText;
+            clonedDoc.head.appendChild(inlinedStyle);
+          }
+          // Remove all external stylesheets — they'd cause SecurityError
           const sheets = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
           sheets.forEach(s => s.remove());
         },
