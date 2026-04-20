@@ -1105,8 +1105,8 @@
 
     const style = document.createElement('style');
     style.textContent = `
-      /* Reset: strip all host page class styles, except KaTeX internals */
-      .cs-content *:not(.katex):not(.katex *) { all: unset; display: revert; box-sizing: border-box; }
+      /* Reset: strip all host page class styles, except KaTeX and SVG internals */
+      .cs-content *:not(.katex):not(.katex *):not(svg):not(svg *) { all: unset; display: revert; box-sizing: border-box; }
       .cs-content {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
         font-size: 15px;
@@ -1140,8 +1140,7 @@
         padding: 10px 14px;
         border-radius: 8px;
         overflow-x: auto;
-        white-space: pre-wrap;
-        word-break: break-word;
+        white-space: pre;
         font-size: 13px;
         line-height: 1.7;
         font-family: "Fira Code", "Consolas", "Courier New", monospace;
@@ -1155,6 +1154,7 @@
         border-radius: 0;
         font-size: inherit;
         color: inherit;
+        white-space: inherit;
       }
       .cs-content blockquote {
         border-left: 3px solid #6366f1;
@@ -1179,18 +1179,27 @@
       .cs-content table {
         width: 100%;
         border-collapse: collapse;
+        border-spacing: 0;
         margin: 0.5em 0;
         font-size: 0.9em;
+        display: table;
       }
+      .cs-content thead { display: table-header-group; }
+      .cs-content tbody { display: table-row-group; }
+      .cs-content tr { display: table-row; }
       .cs-content th, .cs-content td {
-        border: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
+        border: 1px solid ${isDark ? '#4b5563' : '#d1d5db'};
         padding: 8px 12px;
         text-align: left;
+        display: table-cell;
       }
       .cs-content th {
         background: ${isDark ? '#1f2937' : '#f9fafb'};
         font-weight: 600;
       }
+      /* SVG / Mermaid: preserve computed styles from host page */
+      .cs-content svg { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
+      .cs-content svg text { font-family: sans-serif; }
     `;
 
     const content = document.createElement('div');
