@@ -539,7 +539,6 @@
       <div class="ds-screenshot-buttons">
         <button id="ds-capture-h" title="Horizontal stitch"><span class="ds-btn-icon">↔</span><span class="ds-btn-label">H</span></button>
         <button id="ds-capture-v" title="Vertical stitch"><span class="ds-btn-icon">↕</span><span class="ds-btn-label">V</span></button>
-        <button id="ds-capture-c" title="Copy as image"><span class="ds-btn-icon">📋</span><span class="ds-btn-label">C</span></button>
       </div>
       <div class="ds-screenshot-status" id="ds-status"></div>
     `;
@@ -568,7 +567,6 @@
     // Bind events
     document.getElementById('ds-capture-h').addEventListener('click', () => enterSelectionMode('horizontal'));
     document.getElementById('ds-capture-v').addEventListener('click', () => enterSelectionMode('vertical'));
-    document.getElementById('ds-capture-c').addEventListener('click', () => enterSelectionMode('copy'));
     document.getElementById('ds-selector-btn').addEventListener('click', toggleResponseList);
     document.getElementById('ds-confirm-capture').addEventListener('click', confirmCapture);
     document.getElementById('ds-cancel-selection').addEventListener('click', exitSelectionMode);
@@ -1202,10 +1200,8 @@
   async function doCapture(blocks, mode) {
     const btnH = document.getElementById('ds-capture-h');
     const btnV = document.getElementById('ds-capture-v');
-    const btnC = document.getElementById('ds-capture-c');
     btnH.disabled = true;
     btnV.disabled = true;
-    btnC.disabled = true;
 
     detectedBgColor = null;
     isCancelled = false;
@@ -1278,19 +1274,14 @@
       }
       canvases.length = 0;
 
-      if (mode === 'copy') {
-        try {
-          await copyImageToClipboard(finalCanvas);
-          showStatus('Copied to clipboard!', 'success');
-        } catch (e) {
-          // Clipboard API not supported, fallback to download
-          console.warn('[ChatShot] Clipboard failed:', e);
-          await downloadImage(finalCanvas);
-          showStatus('Clipboard not supported, downloaded instead', 'info');
-        }
-      } else {
-        await downloadImage(finalCanvas);
-        showStatus('Done!', 'success');
+      // Always download + copy to clipboard
+      await downloadImage(finalCanvas);
+      try {
+        await copyImageToClipboard(finalCanvas);
+        showStatus('Downloaded & copied to clipboard!', 'success');
+      } catch (e) {
+        console.warn('[ChatShot] Clipboard failed:', e);
+        showStatus('Downloaded! (clipboard not supported)', 'success');
       }
 
     } catch (error) {
@@ -1299,7 +1290,6 @@
     } finally {
       btnH.disabled = false;
       btnV.disabled = false;
-      btnC.disabled = false;
       // Remove cancel button
       const cancelEl = document.getElementById('ds-capture-cancel');
       if (cancelEl) cancelEl.remove();
