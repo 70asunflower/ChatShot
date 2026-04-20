@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="icons/icon128.png" alt="ChatShot Logo" width="80" height="80">
+
 # 📸 ChatShot
 
 **Capture AI chat responses as beautiful screenshots**
