@@ -1,26 +1,40 @@
-# ChatShot
+<div align="center">
 
-Capture AI chat responses as beautiful screenshots and stitch them for easy sharing.
+# 📸 ChatShot
 
-![ChatShot Logo](icons/icon128.png)
+**Capture AI chat responses as beautiful screenshots**
 
-## Features
+Select → Merge → Stitch → Share
 
-- **Block Detection**: Automatically detects content blocks (paragraphs, code, tables, formulas, etc.)
-- **Block Selection**: Choose which blocks to capture, with Select All / None controls
-- **Block Merge / Unmerge**: Combine adjacent blocks (Shift+click + Merge) or split them back
-- **Horizontal Stitch (Masonry)**: Waterfall layout -- blocks fill the shortest column, no wasted gaps
-- **Vertical Stitch**: Stack blocks top to bottom in a single column
-- **Auto Theme Detection**: Matches dark/light mode for seamless screenshots
-- **Response Selector**: Pick any conversation response to capture, not just the latest
-- **Smart Width Capping**: Code blocks are capped at 1200px to prevent abnormally wide screenshots
-- **Performance Optimized**: CSS caching, depth-limited style copy, and canvas memory cleanup
-- **Multi-Platform**: Supports 9 major AI chat platforms (see below)
-- **Chrome and Edge**: Works on both Chromium-based browsers
+[![Chrome](https://img.shields.io/badge/Chrome-Compatible-4285F4?logo=googlechrome&logoColor=white)](https://www.google.com/chrome/)
+[![Edge](https://img.shields.io/badge/Edge-Compatible-0078D7?logo=microsoftedge&logoColor=white)](https://www.microsoft.com/edge/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+</div>
+
+---
+
+## ✨ Why ChatShot?
+
+AI chat responses are hard to share — screenshots are messy, copy-paste loses formatting. ChatShot lets you **select exactly what you want**, **merge blocks together**, and **stitch them into a clean image** — ready to paste anywhere.
+
+## 🎯 Features
+
+| Feature | Description |
+|---------|-------------|
+| 🧩 **Block Detection** | Auto-detects paragraphs, code, tables, math formulas, Mermaid diagrams |
+| ✅ **Selective Capture** | Pick the blocks you want — skip the rest |
+| 🔗 **Merge / Unmerge** | Combine adjacent blocks (Shift+click → Merge) or split them back |
+| ↔️ **Horizontal Masonry** | Waterfall layout — fills shortest column, no wasted gaps |
+| ↕️ **Vertical Stack** | Clean single-column layout |
+| 📋 **Auto Clipboard** | Copied to clipboard + downloaded, one click |
+| 🌗 **Theme Detection** | Matches dark/light mode automatically |
+| 🎨 **Full Rendering** | Syntax highlighting, KaTeX math, Mermaid diagrams, tables |
+| 💬 **Response Selector** | Pick any response in the conversation, not just the latest |
 
 ### Masonry vs Row Layout
 
-```text
+```
 Row layout:                  Masonry layout:
 +------+ +------+          +------+ +------+
 |  1   | |      |          |  1   | |      |
@@ -33,49 +47,49 @@ Row layout:                  Masonry layout:
 +------+
 ```
 
-## Supported Platforms
+## 🌐 Supported Platforms
 
-- [x] DeepSeek (chat.deepseek.com)
-- [x] NotebookLM (notebooklm.google.com)
-- [x] ChatGPT (chatgpt.com)
-- [x] Gemini (gemini.google.com)
-- [x] Doubao (www.doubao.com)
-- [x] Kimi (www.kimi.com)
-- [x] Qianwen (www.qianwen.com)
-- [x] ChatGLM (chatglm.cn)
-- [x] Copilot (copilot.microsoft.com)
-- [ ] Claude (coming soon)
+| Platform | URL | Status |
+|----------|-----|--------|
+| DeepSeek | chat.deepseek.com | ✅ |
+| NotebookLM | notebooklm.google.com | ✅ |
+| ChatGPT | chatgpt.com | ✅ |
+| Gemini | gemini.google.com | ✅ |
+| Doubao | www.doubao.com | ✅ |
+| Kimi | www.kimi.com | ✅ |
+| Qianwen | www.qianwen.com | ✅ |
+| ChatGLM | chatglm.cn | ✅ |
+| Copilot | copilot.microsoft.com | ✅ |
+| Claude | claude.ai | 🔜 |
 
-## Installation
+## 🚀 Installation
 
 ### From Source (Developer Mode)
 
-1. Clone this repository:
-
+1. **Clone** this repository:
    ```bash
    git clone https://github.com/70asunflower/ChatShot.git
    ```
+2. Open Chrome → `chrome://extensions/`
+3. Enable **Developer mode** (top right toggle)
+4. Click **Load unpacked** → select the `ChatShot` folder
+5. Open any supported AI chat → start capturing!
 
-2. Open Chrome and go to `chrome://extensions/`
-
-3. Enable **Developer mode** (toggle in top right)
-
-4. Click **Load unpacked** and select the `ChatShot` folder
-
-5. Navigate to a supported AI chat platform and start capturing!
-
-## Usage
+## 📖 Usage
 
 1. Open a chat on a supported platform
-2. Click **H** (horizontal) or **V** (vertical) button
-3. Select/deselect content blocks you want to capture
-4. *(Optional)* **Shift+click** adjacent blocks then click **Merge** to combine them
-5. Click **Capture** to generate and download the image
+2. Click **H** (horizontal masonry) or **V** (vertical stack)
+3. Select / deselect blocks you want to capture
+4. *(Optional)* **Shift+click** adjacent blocks → **Merge** to combine
+5. Click **Capture** — image is downloaded + copied to clipboard
 
-## License
+## 🛠 Tech Stack
 
-MIT License - feel free to use and modify!
+- **Rendering**: [html-to-image](https://github.com/bubkoo/html-to-image) (SVG foreignObject)
+- **Math**: [KaTeX](https://katex.org/) CSS (inline fetched for screenshot compatibility)
+- **Syntax Highlighting**: Computed style baking (preserves host-page colors)
+- **Manifest**: Chrome Extension Manifest V3
 
-## Contributing
+## 📄 License
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+[MIT](LICENSE) — use it however you like.
