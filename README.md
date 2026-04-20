@@ -20,6 +20,19 @@ Select → Merge → Stitch → Share
 
 AI chat responses are hard to share — screenshots are messy, copy-paste loses formatting. ChatShot lets you **select exactly what you want**, **merge blocks together**, and **stitch them into a clean image** — ready to paste anywhere.
 
+## 🖼 Output Examples
+
+<table>
+  <tr>
+    <td align="center"><b>↕️ Vertical Stack</b></td>
+    <td align="center"><b>↔️ Horizontal Masonry</b></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/vertical-stitch.png" alt="Vertical stitch output" width="400"></td>
+    <td><img src="screenshots/horizontal-stitch.png" alt="Horizontal stitch output" width="400"></td>
+  </tr>
+</table>
+
 ## 🎯 Features
 
 | Feature | Description |
