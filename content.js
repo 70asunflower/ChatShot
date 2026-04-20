@@ -1128,6 +1128,14 @@
         border-collapse: collapse;
         width: 100%;
       }
+      .cs-content th, .cs-content td {
+        border: 1px solid ${isDark ? '#4b5563' : '#d1d5db'};
+        padding: 6px 10px;
+      }
+      .cs-content th {
+        background: ${isDark ? '#1f2937' : '#f9fafb'};
+        font-weight: 600;
+      }
       .cs-content img {
         max-width: 100%;
         height: auto;
