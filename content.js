@@ -1629,7 +1629,7 @@
       const t3 = performance.now();
       const blob = await htmlToImage.toBlob(inner, {
         backgroundColor: bgColor,
-        pixelRatio: 1,
+        pixelRatio: 2,
         skipFonts: true,
         onclone: (clonedDoc, clonedEl) => {
           // Collect all same-origin CSS rules and inline them as a single <style>.
