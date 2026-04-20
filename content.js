@@ -1105,8 +1105,8 @@
 
     const style = document.createElement('style');
     style.textContent = `
-      /* Reset: strip all host page class styles */
-      .cs-content * { all: unset; display: revert; box-sizing: border-box; }
+      /* Reset: strip all host page class styles, except KaTeX internals */
+      .cs-content *:not(.katex):not(.katex *) { all: unset; display: revert; box-sizing: border-box; }
       .cs-content {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
         font-size: 15px;
@@ -1191,11 +1191,6 @@
         background: ${isDark ? '#1f2937' : '#f9fafb'};
         font-weight: 600;
       }
-      /* KaTeX support: override all:unset for .katex internal elements */
-      .cs-content .katex { all: revert; font-size: 1.1em; }
-      .cs-content .katex * { all: revert; box-sizing: border-box; }
-      .cs-content .katex-display { all: revert; margin: 0.5em 0; text-align: center; }
-      .cs-content .katex-display * { all: revert; box-sizing: border-box; }
     `;
 
     const content = document.createElement('div');
@@ -1223,16 +1218,17 @@
     inner.appendChild(style);
     inner.appendChild(content);
 
-    // For KaTeX blocks, inject KaTeX CSS for proper math rendering
+    // For KaTeX blocks, inline KaTeX CSS as a <style> tag (not <link>)
+    // so onclone won't remove it. <link> tags are stripped because they
+    // cause SecurityError when html-to-image reads cross-origin cssRules.
     if (hasKatex) {
-      const katexLink = document.createElement('link');
-      katexLink.rel = 'stylesheet';
-      katexLink.href = chrome.runtime.getURL('lib/katex.min.css');
-      inner.insertBefore(katexLink, inner.firstChild);
+      const katexStyle = document.createElement('style');
+      katexStyle.dataset.katexCss = '1';
+      inner.insertBefore(katexStyle, inner.firstChild);
     }
 
     wrapper.appendChild(inner);
-    return { wrapper, inner };
+    return { wrapper, inner, hasKatex };
   }
 
   // ====================================================================
@@ -1647,11 +1643,25 @@
   // ====== Fast path: self-contained container ======
   async function captureWithSelfContainer(block, targetWidth, bgColor) {
     const t0 = performance.now();
-    const { wrapper, inner } = buildSelfContainedContainer(block, targetWidth, bgColor);
+    const { wrapper, inner, hasKatex } = buildSelfContainedContainer(block, targetWidth, bgColor);
     document.body.appendChild(wrapper);
     console.log('[ChatShot] buildSelfContainedContainer:', (performance.now() - t0).toFixed(0) + 'ms');
 
     try {
+      // For KaTeX blocks, fetch and inline the CSS as <style> content.
+      // Must be done after appending to document so the <style> tag is in the live DOM.
+      if (hasKatex) {
+        const katexStyleEl = inner.querySelector('style[data-katex-css]');
+        if (katexStyleEl && !katexStyleEl.textContent) {
+          try {
+            const resp = await fetch(chrome.runtime.getURL('lib/katex.min.css'));
+            katexStyleEl.textContent = await resp.text();
+          } catch (e) {
+            console.warn('[ChatShot] Failed to load KaTeX CSS:', e);
+          }
+        }
+      }
+
       // Inline all images before rendering
       const t1 = performance.now();
       await inlineAllImages(inner);
