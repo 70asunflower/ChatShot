@@ -1277,12 +1277,11 @@
       // Always download + copy to clipboard
       await downloadImage(finalCanvas);
       try {
-        console.log('[ChatShot] Attempting clipboard copy, canvas size:', finalCanvas.width, 'x', finalCanvas.height);
         await copyImageToClipboard(finalCanvas);
         showStatus('Downloaded & copied to clipboard!', 'success');
       } catch (e) {
-        console.warn('[ChatShot] Clipboard failed:', e.name, e.message);
-        showStatus('Downloaded! (clipboard copy failed: ' + e.message + ')', 'success');
+        console.warn('[ChatShot] Clipboard failed:', e);
+        showStatus('Downloaded! (clipboard not supported)', 'success');
       }
 
     } catch (error) {
