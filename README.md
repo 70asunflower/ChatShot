@@ -14,6 +14,10 @@ Select → Merge → Stitch → Share
 
 </div>
 
+<div align="center">
+  <img src="screenshots/promo.png" alt="ChatShot Promo" width="720">
+</div>
+
 ---
 
 ## ✨ Why ChatShot?
