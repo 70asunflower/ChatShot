@@ -28,12 +28,12 @@ AI chat responses are hard to share — screenshots are messy, copy-paste loses 
 
 <table>
   <tr>
-    <td align="center"><b>↕️ Vertical Stack</b></td>
-    <td align="center"><b>↔️ Horizontal Masonry</b></td>
+    <td align="center"><b>1 Column</b></td>
+    <td align="center"><b>2 Columns (Masonry)</b></td>
   </tr>
   <tr>
-    <td><img src="screenshots/vertical-stitch.png" alt="Vertical stitch output" width="400"></td>
-    <td><img src="screenshots/horizontal-stitch.png" alt="Horizontal stitch output" width="400"></td>
+    <td><img src="screenshots/vertical-stitch.png" alt="1 column output" width="400"></td>
+    <td><img src="screenshots/horizontal-stitch.png" alt="2 column masonry output" width="400"></td>
   </tr>
 </table>
 
@@ -44,26 +44,25 @@ AI chat responses are hard to share — screenshots are messy, copy-paste loses 
 | 🧩 **Block Detection** | Auto-detects paragraphs, code, tables, math formulas, Mermaid diagrams |
 | ✅ **Selective Capture** | Pick the blocks you want — skip the rest |
 | 🔗 **Merge / Unmerge** | Combine adjacent blocks (Shift+click → Merge) or split them back |
-| ↔️ **Horizontal Masonry** | Waterfall layout — fills shortest column, no wasted gaps |
-| ↕️ **Vertical Stack** | Clean single-column layout |
+| 🔢 **Configurable Columns** | Choose 1–4 columns via stepper; masonry layout for 2+ columns |
 | 📋 **Auto Clipboard** | Copied to clipboard + downloaded, one click |
 | 🌗 **Theme Detection** | Matches dark/light mode automatically |
 | 🎨 **Full Rendering** | Syntax highlighting, KaTeX math, Mermaid diagrams, tables |
 | 💬 **Response Selector** | Pick any response in the conversation, not just the latest |
 
-### Masonry vs Row Layout
+### Column Layouts
+
+Use the stepper (`- N +`) to choose 1–4 columns. Blocks are placed into the shortest column (masonry), keeping the layout compact.
 
 ```
-Row layout:                  Masonry layout:
-+------+ +------+          +------+ +------+
-|  1   | |      |          |  1   | |      |
-|      | |  2   |          |      | |  2   |
-+------+ |      |          +------+ |      |
-         +------+          +------+ +------+
--- gap -- -- gap --        |  3   | +------+
-+------+                   +------+ |  4   |
-|  3   |                            +------+
-+------+
+1 column (vertical):     2 columns (masonry):     3 columns (masonry):
++----------------+       +------+ +------+       +----+ +----+ +----+
+|  Block 1       |       |  1   | |      |       | 1  | |    | |    |
++----------------+       |      | |  2   |       +----+ | 2  | |    |
+|  Block 2       |       +------+ |      |       +----+ +----+ | 3  |
++----------------+       |  3   | +------+       | 4  | +----+ +----+
+|  Block 3       |       +------+ |  4   |       +----+
++----------------+                +------+
 ```
 
 ## 🌐 Supported Platforms
@@ -97,9 +96,9 @@ Row layout:                  Masonry layout:
 ## 📖 Usage
 
 1. Open a chat on a supported platform
-2. Click **H** (horizontal masonry) or **V** (vertical stack)
+2. Choose column count with the stepper (`- 2 +`), then click **Select**
 3. Select / deselect blocks you want to capture
-4. *(Optional)* **Shift+click** adjacent blocks → **Merge** to combine
+4. *(Optional)* **Ctrl+click** adjacent blocks → **Merge** to combine
 5. Click **Capture** — image is downloaded + copied to clipboard
 
 ## 🛠 Tech Stack
