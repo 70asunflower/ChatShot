@@ -2,7 +2,7 @@
  * ChatShot - UI Styles for the browser extension overlay.
  *
  * SECTIONS:
- *   1. Floating Button Panel   - Fixed bottom-right buttons (H/V/selector)
+ *   1. Floating Button Panel   - Fixed bottom-right stepper + Select button
  *   2. Response Selector       - Dropdown to pick which AI response to capture
  *   3. Status Messages         - Toast-style feedback (success/error/info)
  *   4. Selection Toolbar       - Right-side toolbar during block selection mode

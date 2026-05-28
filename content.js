@@ -42,10 +42,6 @@
 
   // Layout constants for the final stitched image
   const CONFIG = {
-    maxRowWidth: 3000,  // max total pixel width of the masonry output
-    blockGap: 4,        // gap between blocks in masonry layout (px)
-    rowGap: 20,         // (unused legacy) gap between rows
-    backgroundColor: '#1a1a1a',
     padding: 20         // outer padding of the final image (px)
   };
 
@@ -1852,7 +1848,7 @@
     if (canvases.length === 0) return null;
 
     const blockWidth = Math.max(...canvases.map(c => c.width));
-    const gap = numCols === 1 ? 4 : CONFIG.blockGap;
+    const gap = 4;        // gap between blocks (px)
     const dividerGap = 4; // space reserved for divider line
     const headerOffset = HEADER_HEIGHT;
 
