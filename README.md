@@ -43,8 +43,9 @@ AI chat responses are hard to share — screenshots are messy, copy-paste loses 
 |---------|-------------|
 | 🧩 **Block Detection** | Auto-detects paragraphs, code, tables, math formulas, Mermaid diagrams |
 | ✅ **Selective Capture** | Pick the blocks you want — skip the rest |
-| 🔗 **Merge / Unmerge** | Combine adjacent blocks (Shift+click → Merge) or split them back |
+| 🔗 **Merge / Unmerge** | Combine adjacent blocks (Ctrl+click → Merge) or split them back |
 | 🔢 **Configurable Columns** | Choose 1–4 columns via stepper; masonry layout for 2+ columns |
+| ➖ **Block Dividers** | Subtle separator lines between blocks for clear visual boundaries |
 | 📋 **Auto Clipboard** | Copied to clipboard + downloaded, one click |
 | 🌗 **Theme Detection** | Matches dark/light mode automatically |
 | 🎨 **Full Rendering** | Syntax highlighting, KaTeX math, Mermaid diagrams, tables |
