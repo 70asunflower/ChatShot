@@ -14,8 +14,8 @@
  *   5. Capture              - Each selected block is cloned into an off-screen container,
  *                             styles are copied, then html2canvas renders it to a <canvas>
  *   6. Stitching            - Block canvases are arranged into a final image:
- *                             Horizontal mode = masonry/waterfall multi-column layout
- *                             Vertical mode   = single column, stacked top-to-bottom
+ *                             Column count (1-4) chosen by user; 1 = single column,
+ *                             2+ = masonry/waterfall multi-column layout
  *   7. Download             - Final canvas exported as PNG via data URL
  *
  * LLM ADAPTER SYSTEM:
@@ -515,7 +515,9 @@
 
   // --- Selection mode state ---
   let isSelectionMode = false;
-  let currentCaptureMode = 'horizontal'; // 'horizontal' | 'vertical'
+  const MIN_COLUMNS = 1;
+  const MAX_COLUMNS = 4;
+  let currentColumns = 2;
   let detectedBlocks = [];               // Array<{ type, elements[] }>
   let selectedBlockIndices = new Set();  // indices of blocks to capture
   let mergeSelectedIndices = new Set(); // For merge multi-select
@@ -536,9 +538,13 @@
         <button id="ds-selector-btn" title="Select response">Latest</button>
         <div id="ds-response-list" class="ds-response-list"></div>
       </div>
-      <div class="ds-screenshot-buttons">
-        <button id="ds-capture-h" title="Horizontal stitch"><span class="ds-btn-icon">↔</span><span class="ds-btn-label">H</span></button>
-        <button id="ds-capture-v" title="Vertical stitch"><span class="ds-btn-icon">↕</span><span class="ds-btn-label">V</span></button>
+      <div class="ds-controls">
+        <div class="ds-column-stepper">
+          <button id="ds-col-dec" class="ds-stepper-btn" title="Fewer columns">−</button>
+          <span id="ds-col-value" class="ds-stepper-value">2</span>
+          <button id="ds-col-inc" class="ds-stepper-btn" title="More columns">+</button>
+        </div>
+        <button id="ds-start-capture" class="ds-start-btn" title="Select blocks to capture">Select</button>
       </div>
       <div class="ds-screenshot-status" id="ds-status"></div>
     `;
@@ -565,8 +571,24 @@
     document.body.appendChild(toolbar);
 
     // Bind events
-    document.getElementById('ds-capture-h').addEventListener('click', () => enterSelectionMode('horizontal'));
-    document.getElementById('ds-capture-v').addEventListener('click', () => enterSelectionMode('vertical'));
+    function updateStepperState() {
+      document.getElementById('ds-col-value').textContent = currentColumns;
+      document.getElementById('ds-col-dec').disabled = currentColumns <= MIN_COLUMNS;
+      document.getElementById('ds-col-inc').disabled = currentColumns >= MAX_COLUMNS;
+    }
+    document.getElementById('ds-col-dec').addEventListener('click', () => {
+      if (currentColumns > MIN_COLUMNS) {
+        currentColumns--;
+        updateStepperState();
+      }
+    });
+    document.getElementById('ds-col-inc').addEventListener('click', () => {
+      if (currentColumns < MAX_COLUMNS) {
+        currentColumns++;
+        updateStepperState();
+      }
+    });
+    document.getElementById('ds-start-capture').addEventListener('click', () => enterSelectionMode());
     document.getElementById('ds-selector-btn').addEventListener('click', toggleResponseList);
     document.getElementById('ds-confirm-capture').addEventListener('click', confirmCapture);
     document.getElementById('ds-cancel-selection').addEventListener('click', exitSelectionMode);
@@ -667,7 +689,7 @@
   // User selects/deselects content blocks via green overlays.
   // Supports: toggle, select-all, select-none, merge, unmerge.
   // ====================================================================
-  function enterSelectionMode(mode) {
+  function enterSelectionMode() {
     if (isSelectionMode) return;
 
     const response = findSelectedResponse();
@@ -675,8 +697,6 @@
       showStatus('No AI response found', 'error');
       return;
     }
-
-    currentCaptureMode = mode;
     detectedBlocks = detectBlocks(response);
     
     if (detectedBlocks.length === 0) {
@@ -1193,15 +1213,14 @@
       .sort((a, b) => a - b)
       .map(i => detectedBlocks[i]);
     exitSelectionMode();
-    await doCapture(blocksToCapture, currentCaptureMode);
+    await doCapture(blocksToCapture);
   }
 
   // Main capture orchestrator: captures blocks one by one, then stitches
-  async function doCapture(blocks, mode) {
-    const btnH = document.getElementById('ds-capture-h');
-    const btnV = document.getElementById('ds-capture-v');
-    btnH.disabled = true;
-    btnV.disabled = true;
+  async function doCapture(blocks) {
+    document.getElementById('ds-col-dec').disabled = true;
+    document.getElementById('ds-col-inc').disabled = true;
+    document.getElementById('ds-start-capture').disabled = true;
 
     detectedBgColor = null;
     isCancelled = false;
@@ -1263,9 +1282,7 @@
       // Load platform logo for header
       const logoImg = await loadLogo();
       
-      const finalCanvas = mode === 'horizontal' 
-        ? stitchImagesHorizontal(canvases, logoImg)
-        : stitchImagesVertical(canvases, logoImg);
+      const finalCanvas = stitchImages(canvases, logoImg, currentColumns);
 
       // Free individual block canvases to reduce memory
       for (const c of canvases) {
@@ -1288,8 +1305,9 @@
       console.error('[ChatShot] Error:', error);
       showStatus('Error: ' + error.message, 'error');
     } finally {
-      btnH.disabled = false;
-      btnV.disabled = false;
+      document.getElementById('ds-col-dec').disabled = false;
+      document.getElementById('ds-col-inc').disabled = false;
+      document.getElementById('ds-start-capture').disabled = false;
       // Remove cancel button
       const cancelEl = document.getElementById('ds-capture-cancel');
       if (cancelEl) cancelEl.remove();
@@ -1631,6 +1649,8 @@
             try {
               // If cssRules is readable, it's same-origin
               for (const rule of sheet.cssRules) {
+                // Skip @font-face rules to avoid font decoding errors in SVG foreignObject
+                if (rule.type === CSSRule.FONT_FACE_RULE) continue;
                 cssText += rule.cssText + '\n';
               }
             } catch (e) {
@@ -1826,38 +1846,33 @@
     ctx.fillText(displayName, textX, HEADER_HEIGHT / 2);
   }
 
-  // Masonry layout: blocks placed into N columns, each block goes into the shortest column.
-  // All columns use the same width (= widest block canvas) to avoid jagged right edges.
-  function stitchImagesHorizontal(canvases, logoImg) {
+  // Unified stitching: masonry layout with configurable column count (1-4).
+  // numCols=1 is equivalent to the old vertical stack; numCols>=2 uses masonry.
+  function stitchImages(canvases, logoImg, numCols) {
     if (canvases.length === 0) return null;
-    
-    // Determine number of columns based on maximum block width
-    const blockWidth = Math.max(...canvases.map(c => c.width));
-    const numCols = 2;
 
+    const blockWidth = Math.max(...canvases.map(c => c.width));
+    const gap = numCols === 1 ? 2 : CONFIG.blockGap;
     const headerOffset = HEADER_HEIGHT;
-    
+
     // Masonry layout: place each block in the shortest column
     const colHeights = new Array(numCols).fill(CONFIG.padding + headerOffset);
-    const placements = []; // { canvas, x, y }
-    
+    const placements = [];
+
     for (const canvas of canvases) {
-      // Find the shortest column
       let minCol = 0;
       for (let c = 1; c < numCols; c++) {
         if (colHeights[c] < colHeights[minCol]) minCol = c;
       }
-      
-      const x = CONFIG.padding + minCol * (blockWidth + CONFIG.blockGap);
+      const x = CONFIG.padding + minCol * (blockWidth + gap);
       const y = colHeights[minCol];
       placements.push({ canvas, x, y });
-      colHeights[minCol] = y + canvas.height + CONFIG.blockGap;
+      colHeights[minCol] = y + canvas.height + gap;
     }
-    
-    // Calculate final dimensions
-    const totalWidth = CONFIG.padding * 2 + numCols * blockWidth + (numCols - 1) * CONFIG.blockGap;
-    const totalHeight = Math.max(...colHeights) - CONFIG.blockGap + CONFIG.padding;
-    
+
+    const totalWidth = CONFIG.padding * 2 + numCols * blockWidth + (numCols - 1) * gap;
+    const totalHeight = Math.max(...colHeights) - gap + CONFIG.padding;
+
     const finalCanvas = document.createElement('canvas');
     finalCanvas.width = totalWidth;
     finalCanvas.height = totalHeight;
@@ -1865,45 +1880,11 @@
     const bgColor = detectedBgColor || '#ffffff';
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, totalWidth, totalHeight);
-    
-    // Draw header
+
     drawHeader(ctx, totalWidth, logoImg, bgColor);
-    
+
     for (const { canvas, x, y } of placements) {
-      // Force drawing at exactly blockWidth to eliminate jagged edges
       ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, x, y, blockWidth, canvas.height);
-    }
-    return finalCanvas;
-  }
-
-  // Simple vertical stack: all blocks in a single column, top to bottom.
-  function stitchImagesVertical(canvases, logoImg) {
-    if (canvases.length === 0) return null;
-    const gap = 2;
-    const headerOffset = HEADER_HEIGHT;
-    let maxWidth = 0, totalHeight = CONFIG.padding * 2 + headerOffset;
-    for (const canvas of canvases) {
-      maxWidth = Math.max(maxWidth, canvas.width);
-      totalHeight += canvas.height + gap;
-    }
-    totalHeight -= gap;
-    maxWidth += CONFIG.padding * 2;
-
-    const finalCanvas = document.createElement('canvas');
-    finalCanvas.width = maxWidth;
-    finalCanvas.height = totalHeight;
-    const ctx = finalCanvas.getContext('2d');
-    const bgColor = detectedBgColor || '#ffffff';
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, maxWidth, totalHeight);
-
-    // Draw header
-    drawHeader(ctx, maxWidth, logoImg, bgColor);
-
-    let y = CONFIG.padding + headerOffset;
-    for (const canvas of canvases) {
-      ctx.drawImage(canvas, CONFIG.padding, y);
-      y += canvas.height + gap;
     }
     return finalCanvas;
   }

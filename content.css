@@ -32,7 +32,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 130px;
+  width: 100px;
 }
 
 /* ============================================ */
@@ -117,72 +117,107 @@
 }
 
 /* ============================================ */
-/* 3. Button Row (Pill Container)               */
+/* 3. Controls: Stepper + Select Button         */
 /* ============================================ */
 
-.ds-screenshot-buttons {
+.ds-controls {
   display: flex;
-  gap: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ds-column-stepper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   border-radius: 10px;
-  overflow: hidden;
   background: rgba(30, 30, 40, 0.92);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  padding: 3px;
+  flex-shrink: 0;
 }
 
-.ds-screenshot-buttons button {
-  flex: 1;
-  padding: 10px 0;
+.ds-stepper-btn {
+  width: 28px;
+  height: 28px;
   border: none;
+  border-radius: 6px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 14px;
-  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
-.ds-screenshot-buttons button:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 20%;
-  height: 60%;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.ds-screenshot-buttons button:hover {
+.ds-stepper-btn:hover {
   background: rgba(99, 102, 241, 0.2);
   color: white;
 }
 
-.ds-screenshot-buttons button:active {
-  background: rgba(99, 102, 241, 0.35);
-  transform: scale(0.97);
+.ds-stepper-btn:active {
+  transform: scale(0.9);
 }
 
-.ds-screenshot-buttons button:disabled {
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(255, 255, 255, 0.25);
+.ds-stepper-btn:disabled {
+  color: rgba(255, 255, 255, 0.2);
   cursor: not-allowed;
 }
 
-/* Button icon style */
-.ds-btn-icon {
-  font-size: 15px;
-  line-height: 1;
+.ds-stepper-btn:disabled:hover {
+  background: transparent;
 }
 
-.ds-btn-label {
-  display: block;
-  font-size: 9px;
-  font-weight: 400;
-  opacity: 0.6;
-  margin-top: 2px;
-  letter-spacing: 0.3px;
+.ds-stepper-value {
+  min-width: 24px;
+  text-align: center;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  user-select: none;
+  background: rgba(99, 102, 241, 0.15);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.ds-start-btn {
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3);
+  backdrop-filter: blur(12px);
+}
+
+.ds-start-btn:hover {
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.5);
+  filter: brightness(1.1);
+}
+
+.ds-start-btn:active {
+  transform: scale(0.97);
+}
+
+.ds-start-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.ds-start-btn:disabled:hover {
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3);
 }
 
 /* Cancel button (during capture) */
