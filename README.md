@@ -56,14 +56,14 @@ AI chat responses are hard to share — screenshots are messy, copy-paste loses 
 Use the stepper (`- N +`) to choose 1–4 columns. Blocks are placed into the shortest column (masonry), keeping the layout compact.
 
 ```
-1 column (vertical):     2 columns (masonry):     3 columns (masonry):
-+----------------+       +------+ +------+       +----+ +----+ +----+
-|  Block 1       |       |  1   | |      |       | 1  | |    | |    |
-+----------------+       |      | |  2   |       +----+ | 2  | |    |
-|  Block 2       |       +------+ |      |       +----+ +----+ | 3  |
-+----------------+       |  3   | +------+       | 4  | +----+ +----+
-|  Block 3       |       +------+ |  4   |       +----+
-+----------------+                +------+
+1 col (vertical):      2 cols (masonry):      3 cols (masonry):      4 cols (masonry):
++----------------+    +------+ +------+      +----+ +----+ +----+    +----+ +----+ +----+ +----+
+|  Block 1       |    |  1   | |      |      | 1  | |    | |    |    | 1  | |    | |    | |    |
++----------------+    |      | |  2   |      +----+ | 2  | |    |    +----+ | 2  | |    | |    |
+|  Block 2       |    +------+ |      |      +----+ +----+ | 3  |    +----+ +----+ | 3  | |    |
++----------------+    |  3   | +------+      | 4  | +----+ +----+    +----+ +----+ +----+ | 4  |
+|  Block 3       |    +------+ |  4   |      +----+                                    +----+
++----------------+             +------+
 ```
 
 ## 🌐 Supported Platforms
