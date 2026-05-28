@@ -1852,12 +1852,13 @@
     if (canvases.length === 0) return null;
 
     const blockWidth = Math.max(...canvases.map(c => c.width));
-    const gap = numCols === 1 ? 2 : CONFIG.blockGap;
+    const gap = numCols === 1 ? 4 : CONFIG.blockGap;
+    const dividerGap = 4; // space reserved for divider line
     const headerOffset = HEADER_HEIGHT;
 
     // Masonry layout: place each block in the shortest column
     const colHeights = new Array(numCols).fill(CONFIG.padding + headerOffset);
-    const placements = [];
+    const placements = []; // { canvas, x, y, col }
 
     for (const canvas of canvases) {
       let minCol = 0;
@@ -1866,12 +1867,12 @@
       }
       const x = CONFIG.padding + minCol * (blockWidth + gap);
       const y = colHeights[minCol];
-      placements.push({ canvas, x, y });
-      colHeights[minCol] = y + canvas.height + gap;
+      placements.push({ canvas, x, y, col: minCol });
+      colHeights[minCol] = y + canvas.height + dividerGap;
     }
 
     const totalWidth = CONFIG.padding * 2 + numCols * blockWidth + (numCols - 1) * gap;
-    const totalHeight = Math.max(...colHeights) - gap + CONFIG.padding;
+    const totalHeight = Math.max(...colHeights) - dividerGap + CONFIG.padding;
 
     const finalCanvas = document.createElement('canvas');
     finalCanvas.width = totalWidth;
@@ -1883,9 +1884,35 @@
 
     drawHeader(ctx, totalWidth, logoImg, bgColor);
 
+    // Draw blocks
     for (const { canvas, x, y } of placements) {
       ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, x, y, blockWidth, canvas.height);
     }
+
+    // Draw divider lines between vertically adjacent blocks in the same column
+    const isDark = bgColor === '#1e1e1e';
+    const lineColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 1;
+
+    // Group placements by column
+    const columns = {};
+    for (const p of placements) {
+      if (!columns[p.col]) columns[p.col] = [];
+      columns[p.col].push(p);
+    }
+    for (const colBlocks of Object.values(columns)) {
+      colBlocks.sort((a, b) => a.y - b.y);
+      for (let i = 0; i < colBlocks.length - 1; i++) {
+        const lineY = colBlocks[i].y + colBlocks[i].canvas.height + dividerGap / 2;
+        const lineX = colBlocks[i].x;
+        ctx.beginPath();
+        ctx.moveTo(lineX, lineY);
+        ctx.lineTo(lineX + blockWidth, lineY);
+        ctx.stroke();
+      }
+    }
+
     return finalCanvas;
   }
 
