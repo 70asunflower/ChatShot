@@ -341,6 +341,17 @@
   opacity: 1;
 }
 
+/* Column stepper inside toolbar — keep buttons compact */
+.ds-selection-toolbar .ds-column-stepper {
+  justify-content: center;
+}
+.ds-selection-toolbar .ds-stepper-btn {
+  width: 28px;
+}
+.ds-selection-toolbar .ds-stepper-value {
+  min-width: 24px;
+}
+
 /* Selection count badge */
 .ds-selection-count {
   display: flex;

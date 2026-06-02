@@ -534,14 +534,7 @@
         <button id="ds-selector-btn" title="Select response">Latest</button>
         <div id="ds-response-list" class="ds-response-list"></div>
       </div>
-      <div class="ds-controls">
-        <div class="ds-column-stepper">
-          <button id="ds-col-dec" class="ds-stepper-btn" title="Fewer columns">−</button>
-          <span id="ds-col-value" class="ds-stepper-value">2</span>
-          <button id="ds-col-inc" class="ds-stepper-btn" title="More columns">+</button>
-        </div>
-        <button id="ds-start-capture" class="ds-start-btn" title="Select blocks to capture">Select</button>
-      </div>
+      <button id="ds-start-capture" class="ds-start-btn" title="Select blocks to capture">Select</button>
       <div class="ds-screenshot-status" id="ds-status"></div>
     `;
     document.body.appendChild(container);
@@ -560,6 +553,12 @@
       <div class="ds-toolbar-separator"></div>
       <button id="ds-merge-blocks" title="Ctrl+click blocks to select, then merge">Merge</button>
       <button id="ds-unmerge-block" title="Unmerge selected merged block">Unmerge</button>
+      <div class="ds-toolbar-separator"></div>
+      <div class="ds-column-stepper">
+        <button id="ds-col-dec" class="ds-stepper-btn" title="Fewer columns">−</button>
+        <span id="ds-col-value" class="ds-stepper-value">2</span>
+        <button id="ds-col-inc" class="ds-stepper-btn" title="More columns">+</button>
+      </div>
       <div class="ds-toolbar-separator"></div>
       <button id="ds-confirm-capture">Capture</button>
       <button id="ds-cancel-selection">Cancel</button>
