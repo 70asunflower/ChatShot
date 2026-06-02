@@ -1133,6 +1133,15 @@
       }
     }
 
+    // Remove scrollbar elements from tables (DeepSeek's .ds-scroll-area
+    // includes custom scrollbars that show as gray bars in screenshots).
+    content.querySelectorAll('.ds-scroll-area__scrollbar, .ds-scroll-area__gutter, .ds-scroll-area__thumb').forEach(el => el.remove());
+    // Make scroll areas expand to full content height so no truncation.
+    content.querySelectorAll('.ds-scroll-area').forEach(el => {
+      el.style.maxHeight = 'none';
+      el.style.overflow = 'visible';
+    });
+
     inner.appendChild(style);
     inner.appendChild(content);
 
