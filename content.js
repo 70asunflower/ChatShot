@@ -1216,12 +1216,10 @@
         await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
         
         try {
-          console.log('[ChatShot] Block', i + 1, '/', blocks.length, 'type:', blocks[i].type, 'elements:', blocks[i].elements.length);
           const canvas = await captureWithRetry(blocks[i], maxWidth);
           canvases.push(canvas);
-          console.log('[ChatShot] Block', i + 1, 'done, canvas:', canvas.width + 'x' + canvas.height);
         } catch (err) {
-          console.error('[ChatShot] Block', i + 1, 'FAILED:', err.message, err.stack);
+          console.error('[ChatShot] Block', i + 1, 'FAILED:', err.message);
           throw err;
         }
       }
@@ -1238,9 +1236,7 @@
       // Load platform logo for header
       const logoImg = await loadLogo();
       
-      console.log('[ChatShot] Step7: stitching ' + canvases.length + ' canvases, ' + currentColumns + ' columns');
       const finalCanvas = stitchImages(canvases, logoImg, currentColumns);
-      console.log('[ChatShot] Step7: stitched canvas ' + finalCanvas.width + 'x' + finalCanvas.height);
 
       // Free individual block canvases to reduce memory
       for (const c of canvases) {
@@ -1477,13 +1473,11 @@
   // ====== Fast path: self-contained container ======
   async function captureWithSelfContainer(block, targetWidth, bgColor) {
     const t0 = performance.now();
-    console.log('[ChatShot] Step1: buildSelfContainedContainer start');
     const { wrapper, inner, hasKatex } = buildSelfContainedContainer(block, targetWidth, bgColor);
     document.body.appendChild(wrapper);
     DEBUG && console.log('[ChatShot] buildSelfContainedContainer:', (performance.now() - t0).toFixed(0) + 'ms');
 
     try {
-      console.log('[ChatShot] Step2: hasKatex=' + hasKatex);
       // For KaTeX blocks, fetch and inline the CSS as <style> content.
       // Must be done after appending to document so the <style> tag is in the live DOM.
       if (hasKatex) {
@@ -1500,22 +1494,15 @@
 
       // Inline all images before rendering
       const t1 = performance.now();
-      console.log('[ChatShot] Step3: inlineAllImages (' + inner.querySelectorAll('img').length + ' images)');
       await inlineAllImages(inner);
       DEBUG && console.log('[ChatShot] inlineAllImages:', (performance.now() - t1).toFixed(0) + 'ms');
 
       // Sanitize XML-illegal control chars for SVG foreignObject serialization
       const t2 = performance.now();
       stripXmlIllegalChars(inner);
-      console.log('[ChatShot] Step4: stripXmlIllegalChars done');
       DEBUG && console.log('[ChatShot] stripXmlIllegalChars:', (performance.now() - t2).toFixed(0) + 'ms');
 
-      // html-to-image: SVG foreignObject approach — much faster than html2canvas
-      // Pass 'inner' (not 'wrapper') to avoid left:-10000px being serialized.
-      // skipFonts avoids SecurityError when reading cross-origin styleSheets.
-      // onclone removes external stylesheets from the cloned DOM.
       const t3 = performance.now();
-      console.log('[ChatShot] Step5: htmlToImage.toBlob, width=' + inner.style.width + ' innerHTML size=' + inner.innerHTML.length);
       const blob = await htmlToImage.toBlob(inner, {
         backgroundColor: bgColor,
         pixelRatio: 1.5,
@@ -1527,7 +1514,10 @@
             for (const sheet of document.styleSheets) {
               try {
                 for (const rule of sheet.cssRules) {
-                  if (rule.type === CSSRule.FONT_FACE_RULE) continue;
+                  // Skip @font-face (type 5) and @import (type 3).
+                  // @import would trigger the browser to fetch external CSS
+                  // containing @font-face rules, causing font decode errors.
+                  if (rule.type === CSSRule.FONT_FACE_RULE || rule.type === CSSRule.IMPORT_RULE) continue;
                   cssText += rule.cssText + '\n';
                 }
               } catch (e) { /* cross-origin, skip */ }
@@ -1556,9 +1546,7 @@
 
       // Convert blob to canvas for stitching compatibility
       const t4 = performance.now();
-      console.log('[ChatShot] Step6: createImageBitmap, blob size=' + (blob.size / 1024).toFixed(0) + 'KB');
       const bitmap = await createImageBitmap(blob);
-      console.log('[ChatShot] Step6: bitmap ' + bitmap.width + 'x' + bitmap.height);
       const canvas = document.createElement('canvas');
       canvas.width = bitmap.width;
       canvas.height = bitmap.height;
