@@ -40,6 +40,8 @@
 (function() {
   'use strict';
 
+  const DEBUG = false; // Set to true to enable performance logging
+
   // Layout constants for the final stitched image
   const CONFIG = {
     padding: 20         // outer padding of the final image (px)
@@ -50,6 +52,50 @@
   // Each adapter handles one AI chat platform's DOM structure.
   // Key contract: getBlocks(container) -> Array<{ type, elements[] }>
   // ====================================================================
+
+  // Shared helpers for adapters with common DOM patterns
+
+  /**
+   * Default block detection for heading/divider-based layouts.
+   * Used by gemini, doubao, kimi — they all split on h2/h3/hr.
+   * @param {Element} container  - AI response DOM container
+   * @param {string[]} dividerTags - lowercase tag names that start a new section
+   * @param {Function} [preFilterFn] - optional filter, return true to skip a child
+   */
+  function defaultGetBlocks(container, dividerTags, preFilterFn) {
+    const blocks = [];
+    let currentBlock = null;
+    const children = Array.from(container.children);
+    for (const child of children) {
+      if (preFilterFn && preFilterFn(child)) continue;
+      const tagName = child.tagName.toLowerCase();
+      if (dividerTags.includes(tagName)) {
+        if (currentBlock && currentBlock.elements.length > 0) {
+          blocks.push(currentBlock);
+        }
+        if (tagName === 'hr') {
+          currentBlock = null;
+        } else {
+          currentBlock = { type: 'section', elements: [child] };
+        }
+      } else if (currentBlock) {
+        currentBlock.elements.push(child);
+      } else {
+        currentBlock = { type: 'default', elements: [child] };
+      }
+    }
+    if (currentBlock && currentBlock.elements.length > 0) {
+      blocks.push(currentBlock);
+    }
+    return blocks;
+  }
+
+  /** Default response title fallback used by most adapters. */
+  function defaultGetResponseTitle(respElement, index) {
+    const firstText = respElement.textContent?.trim().slice(0, 20);
+    return firstText ? firstText + '...' : 'Response ' + (index + 1);
+  }
+
   const LLM_ADAPTERS = {
     deepseek: {
       name: 'deepseek',
@@ -106,8 +152,7 @@
             return userText.slice(0, 20) + (userText.length > 20 ? '...' : '');
           }
         }
-        const firstText = respElement.textContent?.trim().slice(0, 20);
-        return firstText ? firstText + '...' : `Response ${index + 1}`;
+        return defaultGetResponseTitle(respElement, index);
       }
     },
     notebooklm: {
@@ -146,8 +191,7 @@
             }
           }
         }
-        const firstText = respElement.textContent?.trim().slice(0, 20);
-        return firstText ? firstText + '...' : `Response ${index + 1}`;
+        return defaultGetResponseTitle(respElement, index);
       }
     },
     chatgpt: {
@@ -196,8 +240,7 @@
             prevEl = prevEl.previousElementSibling;
           }
         }
-        const firstText = respElement.textContent?.trim().slice(0, 20);
-        return firstText ? firstText + '...' : `Response ${index + 1}`;
+        return defaultGetResponseTitle(respElement, index);
       }
     },
     gemini: {
@@ -206,33 +249,7 @@
       logo: 'gemini-color.png',
       host: 'gemini.google.com',
       responseSelector: '.markdown.markdown-main-panel',
-      getBlocks: (container) => {
-        const blocks = [];
-        let currentBlock = null;
-        const children = Array.from(container.children);
-        for (const child of children) {
-          const tagName = child.tagName.toLowerCase();
-          // h2, h3, hr as section dividers
-          if (tagName === 'h2' || tagName === 'h3' || tagName === 'hr') {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-            }
-            if (tagName === 'hr') {
-              currentBlock = null; // hr is just a divider, don't include it
-            } else {
-              currentBlock = { type: 'section', elements: [child] };
-            }
-          } else if (currentBlock) {
-            currentBlock.elements.push(child);
-          } else {
-            currentBlock = { type: 'default', elements: [child] };
-          }
-        }
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        return blocks;
-      },
+      getBlocks: (container) => defaultGetBlocks(container, ['h2', 'h3', 'hr']),
       getResponseTitle: (respElement, index) => {
         // Look for the user query in the conversation
         const conversationTurn = respElement.closest('conversation-turn, [data-turn-id]');
@@ -248,8 +265,7 @@
             }
           }
         }
-        const firstText = respElement.textContent?.trim().slice(0, 20);
-        return firstText ? firstText + '...' : `Response ${index + 1}`;
+        return defaultGetResponseTitle(respElement, index);
       }
     },
     doubao: {
@@ -258,40 +274,9 @@
       logo: 'doubao-color.png',
       host: 'www.doubao.com',
       responseSelector: '[data-testid="message_text_content"].flow-markdown-body',
-      getBlocks: (container) => {
-        const blocks = [];
-        let currentBlock = null;
-        const children = Array.from(container.children);
-        for (const child of children) {
-          const tagName = child.tagName.toLowerCase();
-          // Skip line break divs
-          if (child.classList.contains('md-box-line-break')) continue;
-          
-          // h2, h3, hr as section dividers
-          if (tagName === 'h2' || tagName === 'h3' || tagName === 'hr') {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-            }
-            if (tagName === 'hr') {
-              currentBlock = null;
-            } else {
-              currentBlock = { type: 'section', elements: [child] };
-            }
-          } else if (currentBlock) {
-            currentBlock.elements.push(child);
-          } else {
-            currentBlock = { type: 'default', elements: [child] };
-          }
-        }
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        return blocks;
-      },
-      getResponseTitle: (respElement, index) => {
-        const firstText = respElement.textContent?.trim().slice(0, 20);
-        return firstText ? firstText + '...' : `Response ${index + 1}`;
-      }
+      getBlocks: (container) => defaultGetBlocks(container, ['h2', 'h3', 'hr'],
+        (child) => child.classList.contains('md-box-line-break')),
+      getResponseTitle: defaultGetResponseTitle
     },
     kimi: {
       name: 'kimi',
@@ -299,34 +284,8 @@
       logo: 'kimi-color.png',
       host: 'www.kimi.com',
       responseSelector: '.markdown',
-      getBlocks: (container) => {
-        const blocks = [];
-        let currentBlock = null;
-        const children = Array.from(container.children);
-        for (const child of children) {
-          const tagName = child.tagName.toLowerCase();
-          
-          // h2, h3, h4 as section dividers
-          if (tagName === 'h2' || tagName === 'h3' || tagName === 'h4') {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-            }
-            currentBlock = { type: 'section', elements: [child] };
-          } else if (currentBlock) {
-            currentBlock.elements.push(child);
-          } else {
-            currentBlock = { type: 'default', elements: [child] };
-          }
-        }
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        return blocks;
-      },
-      getResponseTitle: (respElement, index) => {
-        const firstText = respElement.textContent?.trim().slice(0, 20);
-        return firstText ? firstText + '...' : `Response ${index + 1}`;
-      }
+      getBlocks: (container) => defaultGetBlocks(container, ['h2', 'h3', 'h4']),
+      getResponseTitle: defaultGetResponseTitle
     },
     qianwen: {
       name: 'qianwen',
@@ -366,10 +325,7 @@
         }
         return blocks;
       },
-      getResponseTitle: (respElement, index) => {
-        const firstText = respElement.textContent?.trim().slice(0, 20);
-        return firstText ? firstText + '...' : `Response ${index + 1}`;
-      }
+      getResponseTitle: defaultGetResponseTitle
     },
     chatglm: {
       name: 'chatglm',
@@ -430,9 +386,8 @@
       },
       getResponseTitle: (respElement, index) => {
         const heading = respElement.querySelector('h3, h4');
-        if (heading) return heading.textContent?.trim().slice(0, 30) || `Response ${index + 1}`;
-        const firstText = respElement.textContent?.trim().slice(0, 20);
-        return firstText ? firstText + '...' : `Response ${index + 1}`;
+        if (heading) return heading.textContent?.trim().slice(0, 30) || 'Response ' + (index + 1);
+        return defaultGetResponseTitle(respElement, index);
       }
     },
     copilot: {
@@ -480,9 +435,8 @@
       },
       getResponseTitle: (respElement, index) => {
         const heading = respElement.querySelector('h1, h2');
-        if (heading) return heading.textContent?.trim().slice(0, 30) || `Response ${index + 1}`;
-        const firstText = respElement.textContent?.trim().slice(0, 20);
-        return firstText ? firstText + '...' : `Response ${index + 1}`;
+        if (heading) return heading.textContent?.trim().slice(0, 30) || 'Response ' + (index + 1);
+        return defaultGetResponseTitle(respElement, index);
       }
     }
   };
@@ -508,6 +462,7 @@
   let selectedResponseIndex = -1;  // -1 = latest response
   let detectedBgColor = null;      // cached background color for current capture session
   let isCancelled = false;         // capture cancellation flag
+  let cachedOncloneCssText = null; // CSS cache per capture session
 
   // --- Selection mode state ---
   let isSelectionMode = false;
@@ -598,7 +553,7 @@
       }
     });
 
-    console.log('[ChatShot] Plugin loaded');
+    DEBUG && console.log('[ChatShot] Plugin loaded');
   }
 
   // Toggle response list
@@ -1219,8 +1174,7 @@
 
     detectedBgColor = null;
     isCancelled = false;
-    cachedCssText = null; // Reset CSS cache for fresh capture
-
+    cachedOncloneCssText = null; // Reset CSS cache for fresh capture session
     // Show cancel button during capture
     const statusEl = document.getElementById('ds-status');
     const cancelBtn = document.createElement('button');
@@ -1264,7 +1218,7 @@
         const canvas = await captureWithRetry(blocks[i], maxWidth);
         canvases.push(canvas);
       }
-      console.log('[ChatShot] TOTAL capture all blocks:', (performance.now() - captureStart).toFixed(0) + 'ms', '(' + blocks.length + ' blocks)');
+      DEBUG && console.log('[ChatShot] TOTAL capture all blocks:', (performance.now() - captureStart).toFixed(0) + 'ms', '(' + blocks.length + ' blocks)');
 
       if (isCancelled) {
         showStatus('Cancelled', 'error');
@@ -1292,7 +1246,7 @@
         await copyImageToClipboard(finalCanvas);
         showStatus('Downloaded & copied to clipboard!', 'success');
       } catch (e) {
-        console.warn('[ChatShot] Clipboard failed:', e);
+        DEBUG && console.warn('[ChatShot] Clipboard failed:', e);
         showStatus('Downloaded! (clipboard not supported)', 'success');
       }
 
@@ -1386,7 +1340,6 @@
   }
 
   // Cache CSS rules to avoid re-collecting for every block
-  let cachedCssText = null;
 
   function isTableLikeElement(el) {
     if (!el) return false;
@@ -1406,87 +1359,6 @@
     const firstEl = block?.elements?.[0];
     if (!firstEl) return null;
     return firstEl.closest(currentAdapter.responseSelector);
-  }
-
-  function copyCssVariablesFromAncestors(source, target) {
-    const chain = [];
-    let node = source;
-    while (node && node.nodeType === Node.ELEMENT_NODE) {
-      chain.unshift(node);
-      node = node.parentElement;
-    }
-
-    for (const el of chain) {
-      const style = window.getComputedStyle(el);
-      for (let i = 0; i < style.length; i++) {
-        const prop = style[i];
-        if (prop.startsWith('--')) {
-          target.style.setProperty(prop, style.getPropertyValue(prop));
-        }
-      }
-    }
-  }
-
-  function createCaptureContentRoot(block, tempContainer) {
-    const sourceRoot = getBlockRenderContext(block);
-    if (!sourceRoot) return tempContainer;
-
-    const contentRoot = document.createElement('div');
-    contentRoot.className = sourceRoot.className;
-    contentRoot.style.width = '100%';
-    contentRoot.style.maxWidth = '100%';
-    contentRoot.style.boxSizing = 'border-box';
-    copyCssVariablesFromAncestors(sourceRoot, contentRoot);
-    tempContainer.appendChild(contentRoot);
-    return contentRoot;
-  }
-
-  function preserveTableLayoutStyles(source, target) {
-    const style = window.getComputedStyle(source);
-    const extraProps = [
-      'width', 'min-width', 'max-width', 'height',
-      'table-layout', 'border-collapse', 'border-spacing',
-      'vertical-align', 'word-break', 'overflow', 'overflow-x', 'overflow-y'
-    ];
-    for (const prop of extraProps) {
-      target.style[prop] = style.getPropertyValue(prop);
-    }
-  }
-
-  function normalizeTableCloneLayout(root) {
-    root.querySelectorAll('.ds-scroll-area__gutters').forEach((el) => el.remove());
-
-    root.querySelectorAll('.ds-scroll-area').forEach((el) => {
-      el.style.width = '100%';
-      el.style.minWidth = '100%';
-      el.style.maxWidth = '100%';
-      el.style.height = 'auto';
-      el.style.minHeight = 'auto';
-      el.style.maxHeight = 'none';
-      el.style.boxSizing = 'border-box';
-      el.style.overflowX = 'visible';
-      el.style.overflowY = 'visible';
-      el.style.setProperty('--container-height', 'auto');
-    });
-
-    root.querySelectorAll('table').forEach((table) => {
-      table.style.width = '100%';
-      table.style.minWidth = '100%';
-      table.style.maxWidth = '100%';
-      table.style.height = 'auto';
-      table.style.tableLayout = 'auto';
-      table.style.borderCollapse = table.style.borderCollapse || 'collapse';
-    });
-
-    root.querySelectorAll('thead, tbody, tr').forEach((el) => {
-      el.style.height = 'auto';
-      el.style.maxHeight = 'none';
-    });
-
-    root.querySelectorAll('th, td').forEach((cell) => {
-      cell.style.whiteSpace = 'normal';
-      cell.style.wordBreak = 'keep-all';
-    });
   }
 
   // ====== Image Inline ======
@@ -1598,7 +1470,7 @@
     const t0 = performance.now();
     const { wrapper, inner, hasKatex } = buildSelfContainedContainer(block, targetWidth, bgColor);
     document.body.appendChild(wrapper);
-    console.log('[ChatShot] buildSelfContainedContainer:', (performance.now() - t0).toFixed(0) + 'ms');
+    DEBUG && console.log('[ChatShot] buildSelfContainedContainer:', (performance.now() - t0).toFixed(0) + 'ms');
 
     try {
       // For KaTeX blocks, fetch and inline the CSS as <style> content.
@@ -1610,7 +1482,7 @@
             const resp = await fetch(chrome.runtime.getURL('lib/katex.min.css'));
             katexStyleEl.textContent = await resp.text();
           } catch (e) {
-            console.warn('[ChatShot] Failed to load KaTeX CSS:', e);
+            DEBUG && console.warn('[ChatShot] Failed to load KaTeX CSS:', e);
           }
         }
       }
@@ -1618,12 +1490,12 @@
       // Inline all images before rendering
       const t1 = performance.now();
       await inlineAllImages(inner);
-      console.log('[ChatShot] inlineAllImages:', (performance.now() - t1).toFixed(0) + 'ms');
+      DEBUG && console.log('[ChatShot] inlineAllImages:', (performance.now() - t1).toFixed(0) + 'ms');
 
       // Sanitize XML-illegal control chars for SVG foreignObject serialization
       const t2 = performance.now();
       stripXmlIllegalChars(inner);
-      console.log('[ChatShot] stripXmlIllegalChars:', (performance.now() - t2).toFixed(0) + 'ms');
+      DEBUG && console.log('[ChatShot] stripXmlIllegalChars:', (performance.now() - t2).toFixed(0) + 'ms');
 
       // html-to-image: SVG foreignObject approach — much faster than html2canvas
       // Pass 'inner' (not 'wrapper') to avoid left:-10000px being serialized.
@@ -1635,34 +1507,37 @@
         pixelRatio: 1.5,
         skipFonts: true,
         onclone: (clonedDoc, clonedEl) => {
-          // Collect all same-origin CSS rules and inline them as a single <style>.
-          // Cross-origin stylesheets cannot be read (cssRules throws SecurityError),
-          // so we skip those — the deep-cloned elements carry computed styles as fallback.
-          // Then remove all <link> tags so html-to-image doesn't try to read them.
-          let cssText = '';
-          for (const sheet of document.styleSheets) {
-            try {
-              // If cssRules is readable, it's same-origin
-              for (const rule of sheet.cssRules) {
-                // Skip @font-face rules to avoid font decoding errors in SVG foreignObject
-                if (rule.type === CSSRule.FONT_FACE_RULE) continue;
-                cssText += rule.cssText + '\n';
-              }
-            } catch (e) {
-              // SecurityError: cross-origin, skip
+          // Cache CSS collection — stylesheets don't change between blocks.
+          if (cachedOncloneCssText === null) {
+            let cssText = '';
+            for (const sheet of document.styleSheets) {
+              try {
+                for (const rule of sheet.cssRules) {
+                  if (rule.type === CSSRule.FONT_FACE_RULE) continue;
+                  cssText += rule.cssText + '\n';
+                }
+              } catch (e) { /* cross-origin, skip */ }
             }
+            cachedOncloneCssText = cssText;
           }
-          if (cssText) {
+          if (cachedOncloneCssText) {
             const inlinedStyle = clonedDoc.createElement('style');
-            inlinedStyle.textContent = cssText;
+            inlinedStyle.textContent = cachedOncloneCssText;
             clonedDoc.head.appendChild(inlinedStyle);
           }
           // Remove all external stylesheets — they'd cause SecurityError
           const sheets = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
           sheets.forEach(s => s.remove());
+
+          // Strip @font-face from existing <style> tags (host page KaTeX CSS
+          // often injects @font-face via <style>, not <link>, and the rule-type
+          // filter above only covers document.styleSheets).
+          clonedDoc.querySelectorAll('style').forEach(s => {
+            s.textContent = s.textContent.replace(/@font-face\s*\{[^}]*\}/g, '');
+          });
         },
       });
-      console.log('[ChatShot] htmlToImage.toBlob:', (performance.now() - t3).toFixed(0) + 'ms');
+      DEBUG && console.log('[ChatShot] htmlToImage.toBlob:', (performance.now() - t3).toFixed(0) + 'ms');
       if (!blob) throw new Error('html-to-image returned null blob');
 
       // Convert blob to canvas for stitching compatibility
@@ -1674,120 +1549,14 @@
       const ctx = canvas.getContext('2d');
       ctx.drawImage(bitmap, 0, 0);
       bitmap.close();
-      console.log('[ChatShot] createImageBitmap+draw:', (performance.now() - t4).toFixed(0) + 'ms');
-      console.log('[ChatShot] TOTAL captureWithSelfContainer:', (performance.now() - t0).toFixed(0) + 'ms');
+      DEBUG && console.log('[ChatShot] createImageBitmap+draw:', (performance.now() - t4).toFixed(0) + 'ms');
+      DEBUG && console.log('[ChatShot] TOTAL captureWithSelfContainer:', (performance.now() - t0).toFixed(0) + 'ms');
       return canvas;
     } finally {
       wrapper.remove();
     }
   }
 
-
-  // ====================================================================
-  // SECTION: Style Copying
-  // Cloned elements lose their page styles. We copy a subset of computed
-  // styles recursively, plus inject all page CSS rules into the container.
-  // IMPORTANT: This list does NOT include 'width', 'height', 'table-layout',
-  //   'border-collapse', etc. Adding 'width' fixes tables but may break
-  //   text blocks that should reflow to targetWidth.
-  // ====================================================================
-  // We use specific sub-properties rather than shorthands (like 'padding', 'margin', 'border')
-  // because window.getComputedStyle(el).getPropertyValue('padding') often returns an empty
-  // string if the four sides have different values (which is very common in Tailwind, e.g. pt-3 pe-11).
-  const COPY_STYLE_PROPS = [
-    'color', 'font-family', 'font-size', 'font-weight', 'line-height',
-    'background-color', 'text-align', 'display', 'list-style-type', 'white-space',
-    'position', 'top', 'bottom', 'left', 'right', 'z-index',
-    'flex-direction', 'flex-wrap', 'align-items', 'justify-content', 'gap',
-    'box-sizing', 'overflow-wrap', 'word-break',
-    // Specific Padding
-    'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-    // Specific Margin
-    'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
-    // Specific Borders
-    'border-top-width', 'border-top-style', 'border-top-color',
-    'border-right-width', 'border-right-style', 'border-right-color',
-    'border-bottom-width', 'border-bottom-style', 'border-bottom-color',
-    'border-left-width', 'border-left-style', 'border-left-color',
-    // Specific Border Radius
-    'border-top-left-radius', 'border-top-right-radius',
-    'border-bottom-right-radius', 'border-bottom-left-radius',
-    // Visibility & Others
-    'opacity', 'visibility', 'transform', 'overflow', 'overflow-x', 'overflow-y',
-    // SVG support for icons
-    'fill', 'stroke'
-  ];
-  const MAX_STYLE_DEPTH = 8; // max recursion depth for child elements
-
-  function copyElementStyles(source, target, depth) {
-    if (depth > MAX_STYLE_DEPTH) return;
-    const style = window.getComputedStyle(source);
-    for (const prop of COPY_STYLE_PROPS) {
-      target.style[prop] = style.getPropertyValue(prop);
-    }
-    if (isTableLikeElement(source)) {
-      preserveTableLayoutStyles(source, target);
-    }
-    const len = Math.min(source.children.length, target.children.length);
-    for (let i = 0; i < len; i++) {
-      copyElementStyles(source.children[i], target.children[i], depth + 1);
-    }
-  }
-
-  // Regex to detect CSS color functions unsupported by html2canvas.
-  // These modern CSS4 color specs cause html2canvas to throw:
-  //   "Attempting to parse an unsupported color function"
-  // Affected sites: ChatGPT (uses lab(), oklch() extensively)
-  const UNSUPPORTED_COLOR_RE = /\b(lab|lch|oklch|oklab|color-mix|color)\s*\(/i;
-
-  // Strip only the individual declarations that contain unsupported color
-  // functions, keeping all other declarations in the same rule intact.
-  // This avoids dropping entire rules (which caused elements to lose ALL
-  // their styles and render as white boxes).
-  function sanitizeCssRule(cssText) {
-    const braceStart = cssText.indexOf('{');
-    if (braceStart === -1) return cssText; // @import or similar
-    const braceEnd = cssText.lastIndexOf('}');
-    if (braceEnd === -1) return cssText;
-
-    const selector = cssText.substring(0, braceStart);
-    const body = cssText.substring(braceStart + 1, braceEnd);
-
-    const declarations = body.split(';')
-      .map(d => d.trim())
-      .filter(d => d && !UNSUPPORTED_COLOR_RE.test(d));
-
-    if (declarations.length === 0) return ''; // every declaration had unsupported colors
-    return selector + '{ ' + declarations.join('; ') + '; }';
-  }
-
-  function copyComputedStyles(container) {
-    // Cache CSS text so we only collect rules once per capture session
-    if (cachedCssText === null) {
-      const parts = [];
-      try {
-        for (const sheet of document.styleSheets) {
-          try {
-            const rules = sheet.cssRules;
-            for (let i = 0; i < rules.length; i++) {
-              const ruleText = rules[i].cssText;
-              if (UNSUPPORTED_COLOR_RE.test(ruleText)) {
-                // Preserve rule but strip only the bad declarations
-                const sanitized = sanitizeCssRule(ruleText);
-                if (sanitized) parts.push(sanitized);
-              } else {
-                parts.push(ruleText);
-              }
-            }
-          } catch (e) {}
-        }
-      } catch (e) {}
-      cachedCssText = parts.join('\n');
-    }
-    const style = document.createElement('style');
-    style.textContent = cachedCssText;
-    container.insertBefore(style, container.firstChild);
-  }
 
   // ====================================================================
   // SECTION: Image Stitching & Output
