@@ -1212,7 +1212,7 @@
       
       await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
-      const canvases = [];
+      const capturedBlocks = [];
       const captureStart = performance.now();
       for (let i = 0; i < blocks.length; i++) {
         if (isCancelled) {
@@ -1225,8 +1225,8 @@
         await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
         
         try {
-          const canvas = await captureWithRetry(blocks[i], maxWidth);
-          canvases.push(canvas);
+          const result = await captureWithRetry(blocks[i], maxWidth, blocks.length);
+          capturedBlocks.push(result);
         } catch (err) {
           console.error('[ChatShot] Block', i + 1, 'FAILED:', err.message);
           throw err;
@@ -1245,14 +1245,14 @@
       // Load platform logo for header
       const logoImg = await loadLogo();
       
-      const finalCanvas = stitchImages(canvases, logoImg, currentColumns);
+      const finalCanvas = await stitchImages(capturedBlocks, logoImg, currentColumns);
 
-      // Free individual block canvases to reduce memory
-      for (const c of canvases) {
-        c.width = 0;
-        c.height = 0;
+      // Free compressed blobs and CSS cache
+      for (const b of capturedBlocks) {
+        if (b.blob) b.blob = null;
       }
-      canvases.length = 0;
+      capturedBlocks.length = 0;
+      cachedOncloneCssText = null;
 
       // Always download + copy to clipboard
       await downloadImage(finalCanvas);
@@ -1385,6 +1385,16 @@
     });
   }
 
+  function blobToImage(blob) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(blob);
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to decode block image')); };
+      img.src = url;
+    });
+  }
+
   async function inlineAllImages(container) {
     const imgs = Array.from(container.querySelectorAll('img'));
     if (imgs.length === 0) return;
@@ -1433,11 +1443,11 @@
   const MAX_CAPTURE_RETRIES = 3;
   const RETRY_DELAY_MS = 300;
 
-  async function captureWithRetry(block, targetWidth, maxRetries) {
+  async function captureWithRetry(block, targetWidth, totalBlocks, maxRetries) {
     if (maxRetries === undefined) maxRetries = MAX_CAPTURE_RETRIES;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        return await captureBlock(block, targetWidth);
+        return await captureBlock(block, targetWidth, totalBlocks);
       } catch (err) {
         if (attempt === maxRetries - 1) throw err;
         var msg = (err && err.message || '').toLowerCase();
@@ -1473,14 +1483,17 @@
   // ====== Router: all blocks → self-contained container ======
   // html-to-image uses SVG foreignObject — no CSS isolation needed.
   // All blocks (text, code, table, KaTeX) go through the same fast path.
-  async function captureBlock(block, targetWidth = 800) {
+  // totalBlocks controls pixelRatio: 1 block = 1.5x, 2-3 = 1.25x, 4+ = 1.0x
+  async function captureBlock(block, targetWidth, totalBlocks) {
     if (!detectedBgColor) detectedBgColor = detectThemeBackground();
     const bgColor = detectedBgColor;
-    return captureWithSelfContainer(block, targetWidth, bgColor);
+    const ratio = totalBlocks <= 1 ? 1.5 : totalBlocks <= 3 ? 1.25 : 1.0;
+    return captureWithSelfContainer(block, targetWidth, bgColor, ratio);
   }
 
   // ====== Fast path: self-contained container ======
-  async function captureWithSelfContainer(block, targetWidth, bgColor) {
+  async function captureWithSelfContainer(block, targetWidth, bgColor, pixelRatio) {
+    if (!pixelRatio) pixelRatio = 1.5;
     const t0 = performance.now();
     const { wrapper, inner, hasKatex } = buildSelfContainedContainer(block, targetWidth, bgColor);
     document.body.appendChild(wrapper);
@@ -1514,7 +1527,7 @@
       const t3 = performance.now();
       const blob = await htmlToImage.toBlob(inner, {
         backgroundColor: bgColor,
-        pixelRatio: 1.5,
+        pixelRatio: pixelRatio,
         skipFonts: true,
         onclone: (clonedDoc, clonedEl) => {
           // Cache CSS collection — stylesheets don't change between blocks.
@@ -1553,18 +1566,17 @@
       DEBUG && console.log('[ChatShot] htmlToImage.toBlob:', (performance.now() - t3).toFixed(0) + 'ms');
       if (!blob) throw new Error('html-to-image returned null blob');
 
-      // Convert blob to canvas for stitching compatibility
+      // Store compressed blob + dimensions instead of raw canvas pixels.
+      // This cuts per-block memory from ~6MB (raw canvas) to ~250KB (PNG blob),
+      //critical when capturing 5+ blocks to avoid OOM.
       const t4 = performance.now();
       const bitmap = await createImageBitmap(blob);
-      const canvas = document.createElement('canvas');
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(bitmap, 0, 0);
+      const width = bitmap.width;
+      const height = bitmap.height;
       bitmap.close();
-      DEBUG && console.log('[ChatShot] createImageBitmap+draw:', (performance.now() - t4).toFixed(0) + 'ms');
+      DEBUG && console.log('[ChatShot] createImageBitmap:', (performance.now() - t4).toFixed(0) + 'ms');
       DEBUG && console.log('[ChatShot] TOTAL captureWithSelfContainer:', (performance.now() - t0).toFixed(0) + 'ms');
-      return canvas;
+      return { blob, width, height };
     } finally {
       wrapper.remove();
     }
@@ -1624,28 +1636,30 @@
   }
 
   // Unified stitching: masonry layout with configurable column count (1-4).
-  // numCols=1 is equivalent to the old vertical stack; numCols>=2 uses masonry.
-  function stitchImages(canvases, logoImg, numCols) {
-    if (canvases.length === 0) return null;
+  // capturedBlocks: Array<{ blob, width, height }>
+  // Loads each compressed blob on-demand to minimize memory.
+  async function stitchImages(capturedBlocks, logoImg, numCols) {
+    if (capturedBlocks.length === 0) return null;
 
-    const blockWidth = Math.max(...canvases.map(c => c.width));
+    const blockWidth = Math.max(...capturedBlocks.map(c => c.width));
     const gap = 4;        // gap between blocks (px)
     const dividerGap = 4; // space reserved for divider line
     const headerOffset = HEADER_HEIGHT;
 
     // Masonry layout: place each block in the shortest column
     const colHeights = new Array(numCols).fill(CONFIG.padding + headerOffset);
-    const placements = []; // { canvas, x, y, col }
+    const placements = []; // { blockIdx, x, y, col }
 
-    for (const canvas of canvases) {
+    for (let i = 0; i < capturedBlocks.length; i++) {
+      const block = capturedBlocks[i];
       let minCol = 0;
       for (let c = 1; c < numCols; c++) {
         if (colHeights[c] < colHeights[minCol]) minCol = c;
       }
       const x = CONFIG.padding + minCol * (blockWidth + gap);
       const y = colHeights[minCol];
-      placements.push({ canvas, x, y, col: minCol });
-      colHeights[minCol] = y + canvas.height + dividerGap;
+      placements.push({ blockIdx: i, x, y, col: minCol });
+      colHeights[minCol] = y + block.height + dividerGap;
     }
 
     const totalWidth = CONFIG.padding * 2 + numCols * blockWidth + (numCols - 1) * gap;
@@ -1661,9 +1675,13 @@
 
     drawHeader(ctx, totalWidth, logoImg, bgColor);
 
-    // Draw blocks
-    for (const { canvas, x, y } of placements) {
-      ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, x, y, blockWidth, canvas.height);
+    // Draw blocks one at a time, decompressing blobs on-demand
+    for (const { blockIdx, x, y } of placements) {
+      const block = capturedBlocks[blockIdx];
+      const img = await blobToImage(block.blob);
+      ctx.drawImage(img, 0, 0, block.width, block.height, x, y, blockWidth, block.height);
+      // Release the Image element immediately
+      img.src = '';
     }
 
     // Draw divider lines between vertically adjacent blocks in the same column
@@ -1681,7 +1699,8 @@
     for (const colBlocks of Object.values(columns)) {
       colBlocks.sort((a, b) => a.y - b.y);
       for (let i = 0; i < colBlocks.length - 1; i++) {
-        const lineY = colBlocks[i].y + colBlocks[i].canvas.height + dividerGap / 2;
+        const block = capturedBlocks[colBlocks[i].blockIdx];
+        const lineY = colBlocks[i].y + block.height + dividerGap / 2;
         const lineX = colBlocks[i].x;
         ctx.beginPath();
         ctx.moveTo(lineX, lineY);
