@@ -948,9 +948,7 @@
   }
 
   // ====================================================================
-  // SECTION: Block Type Classification
-  // Determines whether a block can use the self-contained container
-  // (fast path) or must fall back to the iframe clone approach.
+  // SECTION: KaTeX Detection
   // ====================================================================
 
   function needsKatex(block) {
@@ -1335,7 +1333,7 @@
     return Math.min(Math.max(preferredWidth, 400), MAX_CAPTURE_WIDTH);
   }
 
-  // Cache CSS rules to avoid re-collecting for every block
+  // Table & block type helpers for overlay metrics
 
   function isTableLikeElement(el) {
     if (!el) return false;
@@ -1751,4 +1749,4 @@
 
 
 
-
+
