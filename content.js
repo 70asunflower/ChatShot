@@ -1069,10 +1069,13 @@
       }
       .cs-content pre {
         white-space: pre;
-        overflow-x: auto;
+        overflow: visible;
+        max-height: none;
       }
       .cs-content pre code {
         white-space: inherit;
+        max-height: none;
+        display: block;
       }
       .cs-content table {
         border-collapse: collapse;
@@ -1117,11 +1120,15 @@
 
     // Remove scrollbar elements from tables (DeepSeek's .ds-scroll-area
     // includes custom scrollbars that show as gray bars in screenshots).
-    content.querySelectorAll('.ds-scroll-area__scrollbar, .ds-scroll-area__gutter, .ds-scroll-area__thumb').forEach(el => el.remove());
-    // Make scroll areas expand to full content height so no truncation.
-    content.querySelectorAll('.ds-scroll-area').forEach(el => {
+    // Use attribute prefix selectors to catch all __scrollbar, __track, __thumb, __gutter.
+    content.querySelectorAll('[class*="scroll-area__scrollbar"], [class*="scroll-area__track"], [class*="scroll-area__thumb"], [class*="scroll-area__gutter"]').forEach(el => el.remove());
+    // Make scroll areas and code blocks expand to full height/width.
+    content.querySelectorAll('.ds-scroll-area, pre, .md-code-block').forEach(el => {
       el.style.maxHeight = 'none';
+      el.style.maxWidth = 'none';
       el.style.overflow = 'visible';
+      el.style.overflowX = 'visible';
+      el.style.overflowY = 'visible';
     });
 
     inner.appendChild(style);
