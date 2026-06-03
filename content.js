@@ -453,8 +453,8 @@
   let currentAdapter = null;
 
   // --- Global state ---
-  let selectedResponseIndex = -1;  // -1 = latest response
-  let detectedBgColor = null;      // cached background color for current capture session
+  let selectedResponseEl = null;    // null = latest response (stored as DOM ref to survive lazy re-render)
+  let detectedBgColor = null;       // cached background color for current capture session
   let isCancelled = false;         // capture cancellation flag
   let cachedOncloneCssText = null; // CSS cache per capture session
 
@@ -564,26 +564,26 @@
     listEl.innerHTML = '';
 
     const latestItem = document.createElement('div');
-    latestItem.className = 'ds-response-item' + (selectedResponseIndex === -1 ? ' selected' : '');
+    latestItem.className = 'ds-response-item' + (selectedResponseEl === null ? ' selected' : '');
     latestItem.textContent = 'Latest response';
-    latestItem.addEventListener('click', () => selectResponse(-1, 'Latest'));
+    latestItem.addEventListener('click', () => selectResponse(null, 'Latest'));
     listEl.appendChild(latestItem);
 
     responses.forEach((resp, index) => {
       const item = document.createElement('div');
-      item.className = 'ds-response-item' + (selectedResponseIndex === index ? ' selected' : '');
+      item.className = 'ds-response-item' + (selectedResponseEl === resp ? ' selected' : '');
       const title = currentAdapter.getResponseTitle(resp, index);
       item.textContent = `${index + 1}. ${title}`;
-      item.addEventListener('click', () => selectResponse(index, title));
+      item.addEventListener('click', () => selectResponse(resp, title));
       listEl.appendChild(item);
     });
 
     listEl.classList.add('show');
   }
 
-  function selectResponse(index, title) {
-    selectedResponseIndex = index;
-    const btnText = index === -1 ? 'Latest' : `${title.slice(0, 12)}${title.length > 12 ? '...' : ''}`;
+  function selectResponse(el, title) {
+    selectedResponseEl = el;
+    const btnText = el === null ? 'Latest' : `${title.slice(0, 12)}${title.length > 12 ? '...' : ''}`;
     document.getElementById('ds-selector-btn').textContent = btnText;
     document.getElementById('ds-response-list').classList.remove('show');
   }
@@ -1265,13 +1265,12 @@
   }
 
   function findSelectedResponse() {
-    const responses = document.querySelectorAll(currentAdapter.responseSelector);
-    if (responses.length === 0) return null;
-    if (selectedResponseIndex === -1) return responses[responses.length - 1];
-    if (selectedResponseIndex >= 0 && selectedResponseIndex < responses.length) {
-      return responses[selectedResponseIndex];
+    // Use stored DOM reference if still attached; else fall back to latest
+    if (selectedResponseEl && document.contains(selectedResponseEl)) {
+      return selectedResponseEl;
     }
-    return responses[responses.length - 1];
+    const responses = document.querySelectorAll(currentAdapter.responseSelector);
+    return responses.length > 0 ? responses[responses.length - 1] : null;
   }
 
   // Detect dark/light theme from page CSS to match screenshot background
