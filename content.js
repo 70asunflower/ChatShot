@@ -1463,11 +1463,11 @@
   // ====== Router: all blocks → self-contained container ======
   // html-to-image uses SVG foreignObject — no CSS isolation needed.
   // All blocks (text, code, table, KaTeX) go through the same fast path.
-  // totalBlocks controls pixelRatio: 1 block = 1.5x, 2-3 = 1.25x, 4+ = 1.0x
+  // totalBlocks controls pixelRatio: 1 block = 2.0x, 2-3 = 1.5x, 4+ = 1.25x
   async function captureBlock(block, targetWidth, totalBlocks) {
     if (!detectedBgColor) detectedBgColor = detectThemeBackground();
     const bgColor = detectedBgColor;
-    const ratio = totalBlocks <= 1 ? 1.5 : totalBlocks <= 3 ? 1.25 : 1.0;
+    const ratio = totalBlocks <= 1 ? 2.0 : totalBlocks <= 3 ? 1.5 : 1.25;
     return captureWithSelfContainer(block, targetWidth, bgColor, ratio);
   }
 
