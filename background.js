@@ -12,7 +12,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .then(blob => {
         const reader = new FileReader();
         reader.onload = () => {
-          var base64 = reader.result.split(',')[1];
+          const base64 = reader.result.split(',')[1];
           sendResponse({ ok: true, base64: base64, contentType: blob.type });
         };
         reader.onerror = () => sendResponse({ ok: false });

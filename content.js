@@ -12,8 +12,8 @@
  *                             Each block = { type: string, elements: HTMLElement[] }
  *   4. Selection Mode       - Green overlays shown on blocks; user can toggle/merge/unmerge
  *   5. Capture              - Each selected block is cloned into an off-screen container,
- *                             styles are copied, then html2canvas renders it to a <canvas>
- *   6. Stitching            - Block canvases are arranged into a final image:
+ *                             styles are inlined, then html-to-image renders via SVG foreignObject
+ *   6. Stitching            - Block images are arranged into a final stitched image:
  *                             Column count (1-4) chosen by user; 1 = single column,
  *                             2+ = masonry/waterfall multi-column layout
  *   7. Download             - Final canvas exported as PNG via data URL
@@ -28,14 +28,8 @@
  *
  * KNOWN ISSUES / GOTCHAS:
  *   - Table blocks (.ds-scroll-area on DeepSeek) report wider getBoundingClientRect()
- *     than their visible area due to scrollable overflow. This causes overlay misalignment
- *     and garbled capture when width:100% is forced on the clone. The table's native
- *     column layout is lost because copyElementStyles() only copies a limited set of CSS
- *     properties (see COPY_STYLE_PROPS) and omits table-layout / column-width properties.
- *   - getBlocksMaxWidth() currently uses the widest element's client rect + 32px padding,
- *     clamped to [400, 1200]. This can be too narrow for short text or too wide for tables.
- *     Attempts to use container-based width detection (.ds-message / .ds-markdown) have
- *     caused regressions; see git log for details.
+ *     than their visible area due to scrollable overflow.
+ *   - getBlocksMaxWidth() clamps capture width to [400, 1200].
  */
 (function() {
   'use strict';
@@ -93,7 +87,7 @@
   /** Default response title fallback used by most adapters. */
   function defaultGetResponseTitle(respElement, index) {
     const firstText = respElement.textContent?.trim().slice(0, 20);
-    return firstText ? firstText + '...' : 'Response ' + (index + 1);
+    return firstText ? firstText + '...' : `Response ${index + 1}`;
   }
 
   const LLM_ADAPTERS = {
@@ -578,17 +572,13 @@
     responses.forEach((resp, index) => {
       const item = document.createElement('div');
       item.className = 'ds-response-item' + (selectedResponseIndex === index ? ' selected' : '');
-      let title = getResponseTitle(resp, index);
+      const title = currentAdapter.getResponseTitle(resp, index);
       item.textContent = `${index + 1}. ${title}`;
       item.addEventListener('click', () => selectResponse(index, title));
       listEl.appendChild(item);
     });
 
     listEl.classList.add('show');
-  }
-
-  function getResponseTitle(respElement, index) {
-    return currentAdapter.getResponseTitle(respElement, index);
   }
 
   function selectResponse(index, title) {
@@ -647,7 +637,7 @@
       showStatus('No AI response found', 'error');
       return;
     }
-    detectedBlocks = detectBlocks(response);
+    detectedBlocks = currentAdapter.getBlocks(response);
     
     if (detectedBlocks.length === 0) {
       showStatus('No content blocks detected', 'error');
@@ -963,18 +953,6 @@
   // (fast path) or must fall back to the iframe clone approach.
   // ====================================================================
 
-  function isTextBlock(block) {
-    if (block.type === 'table' || block.type === 'code') return false;
-    if (block.type === 'merged' && block.originalBlocks) {
-      return block.originalBlocks.every(b => isTextBlock(b));
-    }
-    return block.type === 'section' || block.type === 'default' || block.type === 'paragraph';
-  }
-
-  function isCodeBlock(block) {
-    return block.type === 'code';
-  }
-
   function needsKatex(block) {
     return block.elements.some(el => el.querySelector?.('.katex'));
   }
@@ -985,15 +963,19 @@
   // Skips html2canvas's CSS parsing hell by using only controlled styles.
   // ====================================================================
 
+  /** Calculate relative luminance from an rgb/rgba color string. */
+  function calcLuminance(colorStr) {
+    const m = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!m) return 0;
+    return 0.299 * parseInt(m[1]) / 255 + 0.587 * parseInt(m[2]) / 255 + 0.114 * parseInt(m[3]) / 255;
+  }
+
   /**
    * Check if a CSS color string (rgb/rgba) is "light" — i.e., would be hard
    * to read on a light background.
    */
   function isLightColor(colorStr) {
-    const m = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-    if (!m) return false;
-    const lum = 0.299 * parseInt(m[1]) / 255 + 0.587 * parseInt(m[2]) / 255 + 0.114 * parseInt(m[3]) / 255;
-    return lum > 0.55;
+    return calcLuminance(colorStr) > 0.55;
   }
 
   /**
@@ -1046,7 +1028,7 @@
 
   function buildSelfContainedContainer(block, targetWidth, bgColor) {
     const isDark = bgColor === '#1e1e1e';
-    const isCode = isCodeBlock(block);
+    const isCode = block.type === 'code';
     const hasKatex = needsKatex(block);
 
     // Two-layer structure:
@@ -1287,10 +1269,6 @@
     return responses[responses.length - 1];
   }
 
-  function detectBlocks(container) {
-    return currentAdapter.getBlocks(container);
-  }
-
   // Detect dark/light theme from page CSS to match screenshot background
   function detectThemeBackground() {
     const html = document.documentElement;
@@ -1323,10 +1301,7 @@
 
   function isColorDark(color) {
     if (!color || color === 'transparent' || color === 'rgba(0, 0, 0, 0)') return false;
-    const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-    if (!match) return false;
-    const luminance = 0.299 * parseInt(match[1])/255 + 0.587 * parseInt(match[2])/255 + 0.114 * parseInt(match[3])/255;
-    return luminance < 0.5;
+    return calcLuminance(color) < 0.5;
   }
 
   // Calculate a uniform capture width for all blocks.
@@ -1450,7 +1425,7 @@
         return await captureBlock(block, targetWidth, totalBlocks);
       } catch (err) {
         if (attempt === maxRetries - 1) throw err;
-        var msg = (err && err.message || '').toLowerCase();
+        const msg = (err && err.message || '').toLowerCase();
         if (/image|decode|network|load|taint/.test(msg)) {
           await new Promise(function(r) { setTimeout(r, RETRY_DELAY_MS); });
           continue;
@@ -1761,8 +1736,6 @@
     init();
   }
 })();
-
-
 
 
 

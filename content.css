@@ -2,13 +2,14 @@
  * ChatShot - UI Styles for the browser extension overlay.
  *
  * SECTIONS:
- *   1. Floating Button Panel   - Fixed bottom-right stepper + Select button
+ *   1. Floating Button Panel   - Fixed bottom-right Select button + response picker
  *   2. Response Selector       - Dropdown to pick which AI response to capture
- *   3. Status Messages         - Toast-style feedback (success/error/info)
- *   4. Selection Toolbar       - Right-side toolbar during block selection mode
- *   5. Block Overlays          - Indigo/orange rectangles over content blocks
- *   6. Merge/Unmerge Buttons   - Orange (merge) and indigo-light (unmerge) states
- *   7. Block Checkbox/Number   - Corner badges on each overlay
+ *   3. Stepper                 - Column count control (now in Selection Toolbar)
+ *   4. Status Messages         - Toast-style feedback (success/error/info)
+ *   5. Selection Toolbar       - Right-side toolbar during block selection mode
+ *   6. Block Overlays          - Indigo/orange rectangles over content blocks
+ *   7. Merge/Unmerge Buttons   - Orange (merge) and indigo-light (unmerge) states
+ *   8. Block Checkbox/Number   - Corner badges on each overlay
  *
  * Color System:
  *   Primary:   indigo #6366f1 → #818cf8
@@ -117,14 +118,8 @@
 }
 
 /* ============================================ */
-/* 3. Controls: Stepper + Select Button         */
+/* 2. Stepper + Select Button                   */
 /* ============================================ */
-
-.ds-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
 
 .ds-column-stepper {
   display: flex;
