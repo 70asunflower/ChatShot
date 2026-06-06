@@ -573,7 +573,9 @@
       const item = document.createElement('div');
       item.className = 'ds-response-item' + (selectedResponseEl === resp ? ' selected' : '');
       const title = currentAdapter.getResponseTitle(resp, index);
-      item.textContent = `${index + 1}. ${title}`;
+      // Reverse numbering: newest = 1, oldest = N
+      const num = responses.length - index;
+      item.textContent = `${num}. ${title}`;
       item.addEventListener('click', () => selectResponse(resp, title));
       listEl.appendChild(item);
     });
