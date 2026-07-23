@@ -432,6 +432,70 @@
         if (heading) return heading.textContent?.trim().slice(0, 30) || 'Response ' + (index + 1);
         return defaultGetResponseTitle(respElement, index);
       }
+    },
+    qwenai: {
+      name: 'qwenai',
+      displayName: 'Qwen',
+      logo: 'qwen-color.png',
+      host: 'chat.qwen.ai',
+      responseSelector: '.qwen-markdown',
+      getBlocks: (container) => {
+        const blocks = [];
+        let currentBlock = null;
+        const children = Array.from(container.children);
+        for (const child of children) {
+          const tagName = child.tagName.toLowerCase();
+
+          // Skip whitespace placeholder divs
+          if (child.classList.contains('qwen-markdown-space')) continue;
+
+          // hr (wrapped in .qwen-markdown-hr) as section divider
+          if (tagName === 'hr' || child.classList.contains('qwen-markdown-hr')) {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            currentBlock = null;
+            continue;
+          }
+
+          // code block as its own block
+          if (tagName === 'pre' || child.classList.contains('qwen-markdown-code')) {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+              currentBlock = null;
+            }
+            blocks.push({ type: 'code', elements: [child] });
+            continue;
+          }
+
+          // table as its own block
+          if (tagName === 'table' || child.classList.contains('qwen-markdown-table')) {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+              currentBlock = null;
+            }
+            blocks.push({ type: 'table', elements: [child] });
+            continue;
+          }
+
+          // heading (.qwen-markdown-heading covers h1/h2/h3) starts a new section
+          if (child.classList.contains('qwen-markdown-heading') || ['h1', 'h2', 'h3'].includes(tagName)) {
+            if (currentBlock && currentBlock.elements.length > 0) {
+              blocks.push(currentBlock);
+            }
+            currentBlock = { type: 'section', elements: [child] };
+          } else if (currentBlock) {
+            currentBlock.elements.push(child);
+          } else {
+            currentBlock = { type: 'default', elements: [child] };
+          }
+        }
+        if (currentBlock && currentBlock.elements.length > 0) {
+          blocks.push(currentBlock);
+        }
+        return blocks;
+      },
+      getResponseTitle: defaultGetResponseTitle
     }
   };
 

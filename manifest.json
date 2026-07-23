@@ -21,7 +21,8 @@
         "https://www.kimi.com/*",
         "https://www.qianwen.com/*",
         "https://chatglm.cn/*",
-        "https://copilot.microsoft.com/*"
+        "https://copilot.microsoft.com/*",
+        "https://chat.qwen.ai/*"
       ],
       "js": ["lib/html-to-image.js", "content.js"],
       "css": ["content.css"]
