@@ -1090,6 +1090,44 @@
     }
   }
 
+  // Extract the FULL source text from a Monaco editor instance.
+  // Monaco virtualizes rendering: only the visible lines exist in the DOM, so a
+  // naive clone truncates long code blocks. We pull the complete text from the
+  // live editor model instead. Returns the text, or null if it can't be resolved.
+  function extractMonacoFullText(monacoEl) {
+    // 1) Monaco's global API — match the model by the editor's data-uri.
+    try {
+      const m = window.monaco;
+      if (m && m.editor && typeof m.editor.getModels === 'function') {
+        const uri = monacoEl.getAttribute('data-uri'); // e.g. inmemory://model/451
+        const models = m.editor.getModels();
+        let model = null;
+        if (uri) model = models.find(x => x.uri && x.uri.toString() === uri);
+        if (!model && typeof m.editor.getEditors === 'function') {
+          model = m.editor.getEditors()
+            .filter(e => e.getDomNode && monacoEl.contains(e.getDomNode()))
+            .map(e => e.getModel())[0] || null;
+        }
+        if (!model && models.length === 1) model = models[0];
+        if (model && typeof model.getValue === 'function') {
+          const t = model.getValue();
+          if (t) return t;
+        }
+      }
+    } catch (e) { /* best-effort */ }
+    // 2) Monaco keeps the full text in its .inputarea textarea for IME/copy.
+    try {
+      const ta = monacoEl.querySelector('textarea.inputarea');
+      if (ta && ta.value) return ta.value;
+    } catch (e) { /* best-effort */ }
+    // 3) Fallback: concatenate currently-rendered .view-line rows (partial).
+    try {
+      const lines = monacoEl.querySelectorAll('.view-line');
+      if (lines.length) return Array.from(lines).map(l => l.textContent).join('\n');
+    } catch (e) { /* best-effort */ }
+    return null;
+  }
+
   function buildSelfContainedContainer(block, targetWidth, bgColor) {
     const isDark = bgColor === '#1e1e1e';
     const isCode = block.type === 'code';
@@ -1141,6 +1179,19 @@
         max-height: none;
         display: block;
       }
+      .cs-content pre.cs-code-block {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        padding: 12px 14px;
+        border-radius: 8px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow: visible;
+        max-height: none;
+      }
       .cs-content table {
         border-collapse: collapse;
         width: 100%;
@@ -1163,15 +1214,29 @@
     content.className = 'cs-content';
 
     if (isCode) {
-      // Deep-clone the code element to preserve syntax highlighting spans,
-      // then bake computed colors into inline styles.
-      const codeEl = block.elements[0]?.querySelector('code') || block.elements[0];
-      if (codeEl) {
-        const clone = codeEl.cloneNode(true);
-        bakeComputedColors(codeEl, clone, isDark);
+      const liveEl = block.elements[0];
+      const monacoEl = liveEl && liveEl.querySelector ? liveEl.querySelector('.monaco-editor') : null;
+      const fullText = monacoEl ? extractMonacoFullText(monacoEl) : null;
+      if (fullText != null) {
+        // Monaco virtualizes rendering — a clone would truncate long code to the
+        // visible lines. Re-render the FULL source as a plain <pre> so the entire
+        // code block is captured regardless of viewport / page zoom.
         const pre = document.createElement('pre');
-        pre.appendChild(clone);
+        pre.className = 'cs-code-block';
+        pre.textContent = fullText;
         content.appendChild(pre);
+      } else {
+        // Deep-clone the code element to preserve syntax highlighting spans,
+        // then bake computed colors into inline styles.
+        const codeEl = liveEl && liveEl.querySelector ? liveEl.querySelector('code') : null;
+        const srcEl = codeEl || liveEl;
+        if (srcEl) {
+          const clone = srcEl.cloneNode(true);
+          bakeComputedColors(srcEl, clone, isDark);
+          const pre = document.createElement('pre');
+          pre.appendChild(clone);
+          content.appendChild(pre);
+        }
       }
     } else {
       // Deep-clone each element to preserve full DOM structure, classes,
@@ -1187,12 +1252,28 @@
     // Use attribute prefix selectors to catch all __scrollbar, __track, __thumb, __gutter.
     content.querySelectorAll('[class*="scroll-area__scrollbar"], [class*="scroll-area__track"], [class*="scroll-area__thumb"], [class*="scroll-area__gutter"]').forEach(el => el.remove());
     // Make scroll areas and code blocks expand to full height/width.
-    content.querySelectorAll('.ds-scroll-area, pre, .md-code-block').forEach(el => {
+    content.querySelectorAll('.ds-scroll-area, pre, .md-code-block, .qwen-markdown-code').forEach(el => {
       el.style.maxHeight = 'none';
       el.style.maxWidth = 'none';
       el.style.overflow = 'visible';
       el.style.overflowX = 'visible';
       el.style.overflowY = 'visible';
+    });
+    // Safety net: neutralize inline max-height / overflow constraints on any
+    // descendant so long content isn't clipped to its visible (viewport) portion.
+    content.querySelectorAll('*').forEach(el => {
+      const st = el.style;
+      if ((st.maxHeight && st.maxHeight !== 'none') ||
+          /^(auto|scroll|hidden)$/.test(st.overflow) ||
+          /^(auto|scroll|hidden)$/.test(st.overflowY) ||
+          /^(auto|scroll|hidden)$/.test(st.overflowX)) {
+        st.maxHeight = 'none';
+        st.maxWidth = 'none';
+        st.height = 'auto';
+        st.overflow = 'visible';
+        st.overflowX = 'visible';
+        st.overflowY = 'visible';
+      }
     });
 
     inner.appendChild(style);
