@@ -77,6 +77,7 @@ Use the stepper (`- N +`) to choose 1–4 columns. Blocks are placed into the sh
 | Doubao | www.doubao.com | ✅ |
 | Kimi | www.kimi.com | ✅ |
 | Qianwen | www.qianwen.com | ✅ |
+| Qwen | chat.qwen.ai | ✅ |
 | ChatGLM | chatglm.cn | ✅ |
 | Copilot | copilot.microsoft.com | ✅ |
 | Claude | claude.ai | 🔜 |

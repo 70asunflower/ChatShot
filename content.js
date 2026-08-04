@@ -42,472 +42,23 @@
   };
 
   // ====================================================================
-  // SECTION: LLM Platform Adapters
-  // Each adapter handles one AI chat platform's DOM structure.
-  // Key contract: getBlocks(container) -> Array<{ type, elements[] }>
+  // SECTION: Platform Adapters
+  // LLM_ADAPTERS 定义在 adapters.js（window.ChatShotAdapters），
+  // 这里只解构引用——content.js 不再直接维护平台 DOM 细节。
   // ====================================================================
-
-  // Shared helpers for adapters with common DOM patterns
-
-  /**
-   * Default block detection for heading/divider-based layouts.
-   * Used by gemini, doubao, kimi — they all split on h2/h3/hr.
-   * @param {Element} container  - AI response DOM container
-   * @param {string[]} dividerTags - lowercase tag names that start a new section
-   * @param {Function} [preFilterFn] - optional filter, return true to skip a child
-   */
-  function defaultGetBlocks(container, dividerTags, preFilterFn) {
-    const blocks = [];
-    let currentBlock = null;
-    const children = Array.from(container.children);
-    for (const child of children) {
-      if (preFilterFn && preFilterFn(child)) continue;
-      const tagName = child.tagName.toLowerCase();
-      if (dividerTags.includes(tagName)) {
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        if (tagName === 'hr') {
-          currentBlock = null;
-        } else {
-          currentBlock = { type: 'section', elements: [child] };
-        }
-      } else if (currentBlock) {
-        currentBlock.elements.push(child);
-      } else {
-        currentBlock = { type: 'default', elements: [child] };
-      }
-    }
-    if (currentBlock && currentBlock.elements.length > 0) {
-      blocks.push(currentBlock);
-    }
-    return blocks;
-  }
-
-  /** Default response title fallback used by most adapters. */
-  function defaultGetResponseTitle(respElement, index) {
-    const firstText = respElement.textContent?.trim().slice(0, 20);
-    return firstText ? firstText + '...' : `Response ${index + 1}`;
-  }
-
-  const LLM_ADAPTERS = {
-    deepseek: {
-      name: 'deepseek',
-      displayName: 'DeepSeek',
-      logo: 'deepseek-color.png',
-      host: 'chat.deepseek.com',
-      responseSelector: '.ds-markdown',
-      getBlocks: (container) => {
-        const blocks = [];
-        let currentBlock = null;
-        const children = Array.from(container.children);
-
-        for (const child of children) {
-          const tagName = child.tagName.toLowerCase();
-          const isCode = child.classList.contains('md-code-block') || tagName === 'pre';
-          const isTable = child.classList.contains('ds-scroll-area') || tagName === 'table';
-          const isDivider = tagName === 'hr';
-
-          if (isDivider) {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-              currentBlock = null;
-            }
-            continue;
-          }
-
-          if (isCode || isTable) {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-              currentBlock = null;
-            }
-            blocks.push({
-              type: isCode ? 'code' : 'table',
-              elements: [child]
-            });
-            continue;
-          }
-
-          if (!currentBlock) currentBlock = { type: 'section', elements: [] };
-          currentBlock.elements.push(child);
-        }
-
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        return blocks;
-      },
-      getResponseTitle: (respElement, index) => {
-        let parent = respElement.closest('[class*="message"]') || respElement.parentElement;
-        let prevSibling = parent?.previousElementSibling;
-        if (prevSibling) {
-          const userText = prevSibling.textContent?.trim();
-          if (userText && userText.length > 0) {
-            return userText.slice(0, 20) + (userText.length > 20 ? '...' : '');
-          }
-        }
-        return defaultGetResponseTitle(respElement, index);
-      }
-    },
-    notebooklm: {
-      name: 'notebooklm',
-      displayName: 'NotebookLM',
-      logo: 'gemini-color.png',
-      host: 'notebooklm.google.com',
-      responseSelector: '.to-user-message-card-content .message-text-content',
-      getBlocks: (container) => {
-        const blocks = [];
-        const paragraphs = container.querySelectorAll('labs-tailwind-structural-element-view-v2');
-        paragraphs.forEach((p, i) => {
-          const isHeading = p.querySelector('.paragraph.heading3');
-          if (isHeading) {
-            blocks.push({ type: 'section', elements: [p], isHeading: true });
-          } else {
-            // Group consecutive non-heading paragraphs
-            const lastBlock = blocks[blocks.length - 1];
-            if (lastBlock && !lastBlock.isHeading && lastBlock.type === 'paragraph') {
-              lastBlock.elements.push(p);
-            } else {
-              blocks.push({ type: 'paragraph', elements: [p], isHeading: false });
-            }
-          }
-        });
-        return blocks;
-      },
-      getResponseTitle: (respElement, index) => {
-        const messagePair = respElement.closest('.chat-message-pair');
-        if (messagePair) {
-          const userMessage = messagePair.querySelector('.from-user-container .message-text-content');
-          if (userMessage) {
-            const text = userMessage.textContent?.trim();
-            if (text && text.length > 0) {
-              return text.slice(0, 20) + (text.length > 20 ? '...' : '');
-            }
-          }
-        }
-        return defaultGetResponseTitle(respElement, index);
-      }
-    },
-    chatgpt: {
-      name: 'chatgpt',
-      displayName: 'ChatGPT',
-      logo: 'openai.png',
-      host: 'chatgpt.com',
-      responseSelector: '[data-message-author-role="assistant"] .markdown.prose',
-      getBlocks: (container) => {
-        const blocks = [];
-        let currentBlock = null;
-        const children = Array.from(container.children);
-        for (const child of children) {
-          const tagName = child.tagName.toLowerCase();
-          // Treat h2, h3, ol, ul as section starters
-          if (tagName === 'h2' || tagName === 'h3' || tagName === 'ol' || tagName === 'ul') {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-            }
-            currentBlock = { type: 'section', elements: [child] };
-          } else if (currentBlock) {
-            currentBlock.elements.push(child);
-          } else {
-            currentBlock = { type: 'default', elements: [child] };
-          }
-        }
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        return blocks;
-      },
-      getResponseTitle: (respElement, index) => {
-        // Find the parent message container and look for the user message
-        const messageContainer = respElement.closest('[data-message-author-role="assistant"]');
-        if (messageContainer) {
-          // Look for previous sibling with user role
-          let prevEl = messageContainer.parentElement?.parentElement?.previousElementSibling;
-          while (prevEl) {
-            const userMsg = prevEl.querySelector('[data-message-author-role="user"]');
-            if (userMsg) {
-              const text = userMsg.textContent?.trim();
-              if (text && text.length > 0) {
-                return text.slice(0, 20) + (text.length > 20 ? '...' : '');
-              }
-            }
-            prevEl = prevEl.previousElementSibling;
-          }
-        }
-        return defaultGetResponseTitle(respElement, index);
-      }
-    },
-    gemini: {
-      name: 'gemini',
-      displayName: 'Gemini',
-      logo: 'gemini-color.png',
-      host: 'gemini.google.com',
-      responseSelector: '.markdown.markdown-main-panel',
-      getBlocks: (container) => defaultGetBlocks(container, ['h2', 'h3', 'hr']),
-      getResponseTitle: (respElement, index) => {
-        // Look for the user query in the conversation
-        const conversationTurn = respElement.closest('conversation-turn, [data-turn-id]');
-        if (conversationTurn) {
-          const prevTurn = conversationTurn.previousElementSibling;
-          if (prevTurn) {
-            const userQuery = prevTurn.querySelector('.query-text, [data-user-query]');
-            if (userQuery) {
-              const text = userQuery.textContent?.trim();
-              if (text && text.length > 0) {
-                return text.slice(0, 20) + (text.length > 20 ? '...' : '');
-              }
-            }
-          }
-        }
-        return defaultGetResponseTitle(respElement, index);
-      }
-    },
-    doubao: {
-      name: 'doubao',
-      displayName: 'Doubao',
-      logo: 'doubao-color.png',
-      host: 'www.doubao.com',
-      responseSelector: '[data-testid="message_text_content"].flow-markdown-body',
-      getBlocks: (container) => defaultGetBlocks(container, ['h2', 'h3', 'hr'],
-        (child) => child.classList.contains('md-box-line-break')),
-      getResponseTitle: defaultGetResponseTitle
-    },
-    kimi: {
-      name: 'kimi',
-      displayName: 'Kimi',
-      logo: 'kimi-color.png',
-      host: 'www.kimi.com',
-      responseSelector: '.markdown',
-      getBlocks: (container) => defaultGetBlocks(container, ['h2', 'h3', 'h4']),
-      getResponseTitle: defaultGetResponseTitle
-    },
-    qianwen: {
-      name: 'qianwen',
-      displayName: 'Qianwen',
-      logo: 'qwen-color.png',
-      host: 'www.qianwen.com',
-      responseSelector: '.qk-markdown',
-      getBlocks: (container) => {
-        const blocks = [];
-        let currentBlock = null;
-        const children = Array.from(container.children);
-        for (const child of children) {
-          const tagName = child.tagName.toLowerCase();
-          
-          // hr as section divider, h2/h3 as section headers
-          if (tagName === 'hr' || child.classList.contains('qk-md-hr')) {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-            }
-            currentBlock = null;
-            continue;
-          }
-          
-          if (tagName === 'h2' || tagName === 'h3' || child.classList.contains('qk-md-head')) {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-            }
-            currentBlock = { type: 'section', elements: [child] };
-          } else if (currentBlock) {
-            currentBlock.elements.push(child);
-          } else {
-            currentBlock = { type: 'default', elements: [child] };
-          }
-        }
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        return blocks;
-      },
-      getResponseTitle: defaultGetResponseTitle
-    },
-    chatglm: {
-      name: 'chatglm',
-      displayName: 'ChatGLM',
-      logo: 'qingyan-color.png',
-      host: 'chatglm.cn',
-      responseSelector: '.answer-content-wrap',
-      getBlocks: (container) => {
-        const blocks = [];
-        let currentBlock = null;
-        
-        // Collect all content elements: markdown-body divs and code-no-artifacts (mermaid)
-        const contentElements = container.querySelectorAll('.markdown-body.md-body, .code-no-artifacts');
-        
-        for (const contentEl of contentElements) {
-          // For code blocks (mermaid), treat as a single block
-          if (contentEl.classList.contains('code-no-artifacts')) {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-              currentBlock = null;
-            }
-            blocks.push({ type: 'code', elements: [contentEl] });
-            continue;
-          }
-          
-          // For markdown content, parse children
-          const children = Array.from(contentEl.children);
-          for (const child of children) {
-            const tagName = child.tagName.toLowerCase();
-            
-            // hr as section divider
-            if (tagName === 'hr') {
-              if (currentBlock && currentBlock.elements.length > 0) {
-                blocks.push(currentBlock);
-              }
-              currentBlock = null;
-              continue;
-            }
-            
-            // h3/h4 as section headers
-            if (tagName === 'h3' || tagName === 'h4') {
-              if (currentBlock && currentBlock.elements.length > 0) {
-                blocks.push(currentBlock);
-              }
-              currentBlock = { type: 'section', elements: [child] };
-            } else if (currentBlock) {
-              currentBlock.elements.push(child);
-            } else {
-              currentBlock = { type: 'default', elements: [child] };
-            }
-          }
-        }
-        
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        return blocks;
-      },
-      getResponseTitle: (respElement, index) => {
-        const heading = respElement.querySelector('h3, h4');
-        if (heading) return heading.textContent?.trim().slice(0, 30) || 'Response ' + (index + 1);
-        return defaultGetResponseTitle(respElement, index);
-      }
-    },
-    copilot: {
-      name: 'copilot',
-      displayName: 'Copilot',
-      logo: 'copilot-color.png',
-      host: 'copilot.microsoft.com',
-      responseSelector: '.group\\/ai-message-item',
-      getBlocks: (container) => {
-        const blocks = [];
-        let currentBlock = null;
-        const children = Array.from(container.children);
-        for (const child of children) {
-          const tagName = child.tagName.toLowerCase();
-          
-          // Divider: div with border-b (section separator)
-          const isDivider = tagName === 'div' && (
-            child.classList.contains('pb-6') ||
-            child.className.includes('after:border-b')
-          );
-          if (isDivider) {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-            }
-            currentBlock = null;
-            continue;
-          }
-          
-          // h1/h2 as section headers
-          if (tagName === 'h1' || tagName === 'h2') {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-            }
-            currentBlock = { type: 'section', elements: [child] };
-          } else if (currentBlock) {
-            currentBlock.elements.push(child);
-          } else {
-            currentBlock = { type: 'default', elements: [child] };
-          }
-        }
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        return blocks;
-      },
-      getResponseTitle: (respElement, index) => {
-        const heading = respElement.querySelector('h1, h2');
-        if (heading) return heading.textContent?.trim().slice(0, 30) || 'Response ' + (index + 1);
-        return defaultGetResponseTitle(respElement, index);
-      }
-    },
-    qwenai: {
-      name: 'qwenai',
-      displayName: 'Qwen',
-      logo: 'qwen-color.png',
-      host: 'chat.qwen.ai',
-      responseSelector: '.qwen-markdown',
-      getBlocks: (container) => {
-        const blocks = [];
-        let currentBlock = null;
-        const children = Array.from(container.children);
-        for (const child of children) {
-          const tagName = child.tagName.toLowerCase();
-
-          // Skip whitespace placeholder divs
-          if (child.classList.contains('qwen-markdown-space')) continue;
-
-          // hr (wrapped in .qwen-markdown-hr) as section divider
-          if (tagName === 'hr' || child.classList.contains('qwen-markdown-hr')) {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-            }
-            currentBlock = null;
-            continue;
-          }
-
-          // code block as its own block
-          if (tagName === 'pre' || child.classList.contains('qwen-markdown-code')) {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-              currentBlock = null;
-            }
-            blocks.push({ type: 'code', elements: [child] });
-            continue;
-          }
-
-          // table as its own block
-          if (tagName === 'table' || child.classList.contains('qwen-markdown-table')) {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-              currentBlock = null;
-            }
-            blocks.push({ type: 'table', elements: [child] });
-            continue;
-          }
-
-          // heading (.qwen-markdown-heading covers h1/h2/h3) starts a new section
-          if (child.classList.contains('qwen-markdown-heading') || ['h1', 'h2', 'h3'].includes(tagName)) {
-            if (currentBlock && currentBlock.elements.length > 0) {
-              blocks.push(currentBlock);
-            }
-            currentBlock = { type: 'section', elements: [child] };
-          } else if (currentBlock) {
-            currentBlock.elements.push(child);
-          } else {
-            currentBlock = { type: 'default', elements: [child] };
-          }
-        }
-        if (currentBlock && currentBlock.elements.length > 0) {
-          blocks.push(currentBlock);
-        }
-        return blocks;
-      },
-      getResponseTitle: defaultGetResponseTitle
-    }
-  };
+  const { LLM_ADAPTERS } = window.ChatShotAdapters;
 
   // ====================================================================
   // SECTION: Platform Detection & Global State
   // ====================================================================
 
-  // Match current hostname to an adapter; fallback to deepseek
+  // Match current hostname to an adapter; fallback to deepseek.
+  // Exact host match (or subdomain) — substring matching could false-positive
+  // when two platform hosts share a prefix, and it depends on object order.
   function getCurrentPlatform() {
     const host = window.location.host;
     for (const [key, adapter] of Object.entries(LLM_ADAPTERS)) {
-      if (host.includes(adapter.host)) {
+      if (host === adapter.host || host.endsWith('.' + adapter.host)) {
         return adapter;
       }
     }
@@ -611,6 +162,8 @@
       }
     });
 
+    updateStepperState(); // sync stepper UI with initial currentColumns state
+
     DEBUG && console.log('[ChatShot] Plugin loaded');
   }
 
@@ -664,7 +217,12 @@
   }
 
   function showSelectionToast(message, durationMs = 1500) {
+    // Reuse a single toast element so rapid triggers don't stack overlapping toasts.
+    const prev = document.getElementById('ds-selection-toast');
+    if (prev) prev.remove();
+
     const toast = document.createElement('div');
+    toast.id = 'ds-selection-toast';
     toast.textContent = message;
     toast.style.cssText = [
       'position: fixed',
@@ -744,6 +302,7 @@
     isSelectionMode = false;
     detectedBlocks = [];
     selectedBlockIndices.clear();
+    mergeSelectedIndices.clear();
 
     window.removeEventListener('scroll', scheduleOverlayUpdate, true);
     document.getElementById('ds-selection-toolbar').classList.remove('visible');
@@ -757,6 +316,9 @@
     const overlay = document.createElement('div');
     overlay.className = 'ds-block-overlay' + (isSelected ? ' selected' : '');
     overlay.dataset.index = index;
+    overlay.setAttribute('role', 'button');
+    overlay.setAttribute('aria-label', 'Block ' + (index + 1) + ', click to toggle, Ctrl+click to merge-select');
+    overlay.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
 
     const checkbox = document.createElement('div');
     checkbox.className = 'ds-block-checkbox';
@@ -855,6 +417,7 @@
         selectedBlockIndices.add(index);
         overlay?.classList.add('selected');
       }
+      overlay?.setAttribute('aria-pressed', selectedBlockIndices.has(index) ? 'true' : 'false');
       updateSelectionCount();
     }
   }
@@ -997,14 +560,19 @@
   function selectAllBlocks() {
     detectedBlocks.forEach((_, i) => {
       selectedBlockIndices.add(i);
-      document.querySelector(`.ds-block-overlay[data-index="${i}"]`)?.classList.add('selected');
+      const overlay = document.querySelector(`.ds-block-overlay[data-index="${i}"]`);
+      overlay?.classList.add('selected');
+      overlay?.setAttribute('aria-pressed', 'true');
     });
     updateSelectionCount();
   }
 
   function selectNoBlocks() {
     selectedBlockIndices.clear();
-    document.querySelectorAll('.ds-block-overlay').forEach(el => el.classList.remove('selected'));
+    document.querySelectorAll('.ds-block-overlay').forEach(el => {
+      el.classList.remove('selected');
+      el.setAttribute('aria-pressed', 'false');
+    });
     updateSelectionCount();
   }
 
@@ -1027,19 +595,32 @@
   // Skips html2canvas's CSS parsing hell by using only controlled styles.
   // ====================================================================
 
-  /** Calculate relative luminance from an rgb/rgba color string. */
+  /**
+   * Calculate relative luminance from a CSS color string.
+   * Supports rgb/rgba(), #rrggbb and #rgb forms. Returns 0..1.
+   */
   function calcLuminance(colorStr) {
-    const m = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-    if (!m) return 0;
-    return 0.299 * parseInt(m[1]) / 255 + 0.587 * parseInt(m[2]) / 255 + 0.114 * parseInt(m[3]) / 255;
+    if (!colorStr) return 0;
+    let m = colorStr.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    let r, g, b;
+    if (m) {
+      r = parseInt(m[1], 10); g = parseInt(m[2], 10); b = parseInt(m[3], 10);
+    } else if ((m = colorStr.match(/#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i))) {
+      r = parseInt(m[1], 16); g = parseInt(m[2], 16); b = parseInt(m[3], 16);
+    } else if ((m = colorStr.match(/#([0-9a-f])([0-9a-f])([0-9a-f])/i))) {
+      r = parseInt(m[1] + m[1], 16); g = parseInt(m[2] + m[2], 16); b = parseInt(m[3] + m[3], 16);
+    } else {
+      return 0;
+    }
+    return 0.299 * r / 255 + 0.587 * g / 255 + 0.114 * b / 255;
   }
 
   /**
-   * Check if a CSS color string (rgb/rgba) is "light" — i.e., would be hard
-   * to read on a light background.
+   * Check if a CSS color string is "light" — i.e., would be hard to read on
+   * a light background. Threshold (0.5) is symmetric with isColorDark().
    */
   function isLightColor(colorStr) {
-    return calcLuminance(colorStr) > 0.55;
+    return calcLuminance(colorStr) >= 0.5;
   }
 
   /**
@@ -1091,7 +672,7 @@
   }
 
   function buildSelfContainedContainer(block, targetWidth, bgColor) {
-    const isDark = bgColor === '#1e1e1e';
+    const isDark = isColorDark(bgColor);
     const isCode = block.type === 'code';
     const hasKatex = needsKatex(block);
 
@@ -1513,9 +1094,9 @@
 
   function stripXmlIllegalChars(node) {
     if (node.nodeType === Node.TEXT_NODE) {
-      if (XML_ILLEGAL_CONTROL_CHAR_RE.test(node.nodeValue)) {
-        node.nodeValue = node.nodeValue.replace(XML_ILLEGAL_CONTROL_CHAR_RE, '');
-      }
+      // Note: no .test() guard — a /g regex has a stateful lastIndex and
+      // would intermittently skip control chars across text nodes.
+      node.nodeValue = node.nodeValue.replace(XML_ILLEGAL_CONTROL_CHAR_RE, '');
       return;
     }
     if (node.nodeType === Node.ELEMENT_NODE) {
@@ -1653,7 +1234,7 @@
   const LOGO_SIZE = 48;      // px, logo dimensions in the header
 
   function drawHeader(ctx, totalWidth, logoImg, bgColor) {
-    const isDark = bgColor === '#1e1e1e';
+    const isDark = isColorDark(bgColor);
     
     // Header background
     ctx.fillStyle = isDark ? '#2a2a2a' : '#f5f5f5';
@@ -1730,7 +1311,7 @@
     }
 
     // Draw divider lines between vertically adjacent blocks in the same column
-    const isDark = bgColor === '#1e1e1e';
+    const isDark = isColorDark(bgColor);
     const lineColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
     ctx.strokeStyle = lineColor;
     ctx.lineWidth = 1;
@@ -1762,7 +1343,8 @@
     const ts = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') +
       String(now.getDate()).padStart(2,'0') + '_' + String(now.getHours()).padStart(2,'0') +
       String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
-    const platformName = currentAdapter?.name || 'chatshot';
+    const platformName = (currentAdapter?.displayName || currentAdapter?.name || 'chatshot')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const filename = platformName + '_' + ts + '.png';
     canvas.toBlob((blob) => {
       if (!blob) {
@@ -1814,4 +1396,4 @@
 
 
 
-
+
