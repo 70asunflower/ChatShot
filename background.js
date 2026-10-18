@@ -19,7 +19,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     const done = () => clearTimeout(timer);
 
-    fetch(msg.url, { signal: controller.signal, credentials: 'include' })
+    // Security: credentials MUST be 'omit' to prevent SSRF / credential leakage
+    // when fetching arbitrary external image URLs inside AI responses.
+    fetch(msg.url, { signal: controller.signal, credentials: 'omit', mode: 'cors' })
       .then(resp => {
         done();
         if (!resp.ok) throw new Error('HTTP ' + resp.status);

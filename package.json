@@ -1,0 +1,26 @@
+{
+  "name": "chatshot",
+  "version": "1.5.1",
+  "description": "Capture AI chat responses as beautiful screenshots and stitch them for easy sharing",
+  "type": "module",
+  "scripts": {
+    "build:fonts": "node scripts/embed-katex-fonts.mjs"
+  },
+  "keywords": [
+    "chrome-extension",
+    "screenshot",
+    "ai-chat",
+    "deepseek",
+    "chatgpt",
+    "claude",
+    "gemini",
+    "katex",
+    "markdown"
+  ],
+  "author": "ChatShot Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/70asunflower/ChatShot.git"
+  }
+}

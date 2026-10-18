@@ -47,9 +47,24 @@
   // ====================================================================
   // SECTION: Platform Adapters
   // LLM_ADAPTERS 定义在 adapters.js（window.ChatShotAdapters），
-  // 这里只解构引用——content.js 不再直接维护平台 DOM 细节。
-  // ====================================================================
-  const { LLM_ADAPTERS } = window.ChatShotAdapters;
+  const { LLM_ADAPTERS = {} } = window.ChatShotAdapters || {};
+
+  /**
+   * Security: Sanitize cloned DOM nodes before appending to live document.
+   * Strips executable elements (script, iframe, object, embed) and inline on* handlers.
+   */
+  function sanitizeClonedNode(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+    node.querySelectorAll('script, iframe, object, embed').forEach(el => el.remove());
+    const elements = [node, ...node.querySelectorAll('*')];
+    for (const el of elements) {
+      for (const attr of Array.from(el.attributes || [])) {
+        if (/^on/i.test(attr.name) || /^javascript:/i.test(attr.value)) {
+          el.removeAttribute(attr.name);
+        }
+      }
+    }
+  }
 
   // ====================================================================
   // SECTION: Platform Detection & Global State
@@ -174,8 +189,24 @@
       if (e.key === 'Escape' && isSelectionMode) exitSelectionMode();
     });
     chrome.runtime.onMessage.addListener((msg) => {
-      if (msg && msg.type === 'chatshot-shortcut' && !isSelectionMode) enterSelectionMode();
+      if (msg && msg.type === 'chatshot-shortcut') {
+        if (isSelectionMode) {
+          exitSelectionMode();
+        } else {
+          enterSelectionMode();
+        }
+      }
     });
+
+    // SPA Navigation Detection: reset selection mode & response if chat route changes
+    let lastUrl = window.location.href;
+    setInterval(() => {
+      if (window.location.href !== lastUrl) {
+        lastUrl = window.location.href;
+        if (isSelectionMode) exitSelectionMode();
+        selectedResponseEl = null;
+      }
+    }, 500);
 
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.ds-response-selector')) {
@@ -406,15 +437,41 @@
   // Update overlay positions on scroll.
   // Uses transform: translate() for GPU-composited positioning.
   // This avoids triggering layout (left/top changes) per frame —
-  // the compositor can move boxes independently of the main thread.
+  function findScrollContainer(el) {
+    let cur = el?.parentElement;
+    while (cur && cur !== document.body && cur !== document.documentElement) {
+      const style = window.getComputedStyle(cur);
+      if (/auto|scroll|hidden/.test(style.overflowY) && cur.clientHeight > 0) {
+        return cur;
+      }
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+
+  // Update overlay positions on scroll.
+  // Uses transform: translate() for GPU-composited positioning.
   function updateOverlayPositions() {
     const overlays = document.querySelectorAll('.ds-block-overlay');
+    const scrollContainer = detectedBlocks[0]?.elements[0] ? findScrollContainer(detectedBlocks[0].elements[0]) : null;
+    const scrollRect = scrollContainer ? scrollContainer.getBoundingClientRect() : null;
+
     detectedBlocks.forEach((block, i) => {
       const overlay = overlays[i];
       if (!overlay) return;
 
       const metrics = getOverlayMetrics(block);
 
+      // Hide overlay if scrolled outside visible scroll container viewport
+      if (scrollRect) {
+        const bottom = metrics.top + metrics.height;
+        if (bottom < scrollRect.top || metrics.top > scrollRect.bottom) {
+          overlay.style.display = 'none';
+          return;
+        }
+      }
+
+      overlay.style.display = '';
       overlay.style.width = (metrics.width + 16) + 'px';
       overlay.style.height = (metrics.height + 8) + 'px';
       overlay.style.transform = 'translate(' + (metrics.left - 8) + 'px, ' + (metrics.top - 4) + 'px)';
@@ -700,6 +757,21 @@
     }
   }
 
+  function collectSameOriginStylesheets() {
+    if (cachedOncloneCssText !== null) return cachedOncloneCssText;
+    let cssText = '';
+    for (const sheet of document.styleSheets) {
+      try {
+        for (const rule of sheet.cssRules) {
+          if (rule.type === CSSRule.FONT_FACE_RULE || rule.type === CSSRule.IMPORT_RULE) continue;
+          cssText += rule.cssText + '\n';
+        }
+      } catch (e) { /* cross-origin, skip */ }
+    }
+    cachedOncloneCssText = cssText;
+    return cssText;
+  }
+
   function buildSelfContainedContainer(block, targetWidth, bgColor) {
     const isDark = isColorDark(bgColor);
     const isCode = block.type === 'code';
@@ -727,10 +799,7 @@
       boxSizing: 'border-box',
     });
 
-    // Minimal style overrides — no all:unset! The deep-cloned elements keep
-    // their host-page classes and DOM structure. In onclone we inline all
-    // same-origin stylesheets as <style> tags so html-to-image can read them
-    // without SecurityError, and only remove cross-origin <link> tags.
+    // Inlined base styles for reset and typography
     const style = document.createElement('style');
     style.textContent = `
       .cs-content {
@@ -769,6 +838,14 @@
       }
     `;
 
+    // Inline same-origin stylesheets so host-page classes work without cross-origin SecurityError
+    const pageStyles = collectSameOriginStylesheets();
+    if (pageStyles) {
+      const pageStyleEl = document.createElement('style');
+      pageStyleEl.textContent = pageStyles;
+      inner.appendChild(pageStyleEl);
+    }
+
     const content = document.createElement('div');
     content.className = 'cs-content';
 
@@ -778,6 +855,7 @@
       const codeEl = block.elements[0]?.querySelector('code') || block.elements[0];
       if (codeEl) {
         const clone = codeEl.cloneNode(true);
+        sanitizeClonedNode(clone);
         bakeComputedColors(codeEl, clone, isDark);
         const pre = document.createElement('pre');
         pre.appendChild(clone);
@@ -788,7 +866,9 @@
       // and nesting. This keeps ol/ul, blockquote, table, KaTeX, SVG
       // all working with their host-page CSS.
       for (const el of block.elements) {
-        content.appendChild(el.cloneNode(true));
+        const clone = el.cloneNode(true);
+        sanitizeClonedNode(clone);
+        content.appendChild(clone);
       }
     }
 
@@ -808,9 +888,15 @@
     inner.appendChild(style);
     inner.appendChild(content);
 
+    // Strip external @font-face rules from inlined styles to prevent decode errors,
+    // but keep data-URI fonts (e.g. self-contained KaTeX fonts).
+    inner.querySelectorAll('style:not([data-katex-css])').forEach(s => {
+      s.textContent = s.textContent.replace(/@font-face\s*\{[^}]*\}/g, (rule) =>
+        rule.includes('data:font') ? rule : '');
+    });
+
     // For KaTeX blocks, inline KaTeX CSS as a <style> tag (not <link>)
-    // so onclone won't remove it. <link> tags are stripped because they
-    // cause SecurityError when html-to-image reads cross-origin cssRules.
+    // so it doesn't cause SecurityError when html-to-image serializes the DOM.
     if (hasKatex) {
       const katexStyle = document.createElement('style');
       katexStyle.dataset.katexCss = '1';
@@ -1051,7 +1137,7 @@
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      return await fetch(url, { mode: 'cors', credentials: 'include', signal: controller.signal });
+      return await fetch(url, { mode: 'cors', credentials: 'omit', signal: controller.signal });
     } finally {
       clearTimeout(timer);
     }
@@ -1212,51 +1298,14 @@
       const blob = await htmlToImage.toBlob(inner, {
         backgroundColor: bgColor,
         pixelRatio: pixelRatio,
-        skipFonts: true,
-        onclone: (clonedDoc, clonedEl) => {
-          // Cache CSS collection — stylesheets don't change between blocks.
-          if (cachedOncloneCssText === null) {
-            let cssText = '';
-            for (const sheet of document.styleSheets) {
-              try {
-                for (const rule of sheet.cssRules) {
-                  // Skip @font-face (type 5) and @import (type 3).
-                  // @import would trigger the browser to fetch external CSS
-                  // containing @font-face rules, causing font decode errors.
-                  if (rule.type === CSSRule.FONT_FACE_RULE || rule.type === CSSRule.IMPORT_RULE) continue;
-                  cssText += rule.cssText + '\n';
-                }
-              } catch (e) { /* cross-origin, skip */ }
-            }
-            cachedOncloneCssText = cssText;
-          }
-          if (cachedOncloneCssText) {
-            const inlinedStyle = clonedDoc.createElement('style');
-            inlinedStyle.textContent = cachedOncloneCssText;
-            clonedDoc.head.appendChild(inlinedStyle);
-          }
-          // Remove all external stylesheets — they'd cause SecurityError
-          const sheets = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
-          sheets.forEach(s => s.remove());
-
-          // Strip @font-face from existing <style> tags (host page KaTeX CSS
-          // often injects @font-face via <style>, not <link>, and the rule-type
-          // filter above only covers document.styleSheets).
-          clonedDoc.querySelectorAll('style').forEach(s => {
-            // Strip external @font-face rules (host-page fonts would trigger
-            // fetch/decode errors inside the SVG) but keep data-URI rules —
-            // those are our self-contained KaTeX fonts.
-            s.textContent = s.textContent.replace(/@font-face\s*\{[^}]*\}/g, (rule) =>
-              rule.includes('data:font') ? rule : '');
-          });
-        },
+        skipFonts: true
       });
       DEBUG && console.log('[ChatShot] htmlToImage.toBlob:', (performance.now() - t3).toFixed(0) + 'ms');
       if (!blob) throw new Error('html-to-image returned null blob');
 
       // Store compressed blob + dimensions instead of raw canvas pixels.
       // This cuts per-block memory from ~6MB (raw canvas) to ~250KB (PNG blob),
-      //critical when capturing 5+ blocks to avoid OOM.
+      // critical when capturing 5+ blocks to avoid OOM.
       const t4 = performance.now();
       const bitmap = await createImageBitmap(blob);
       const width = bitmap.width;
@@ -1264,7 +1313,7 @@
       bitmap.close();
       DEBUG && console.log('[ChatShot] createImageBitmap:', (performance.now() - t4).toFixed(0) + 'ms');
       DEBUG && console.log('[ChatShot] TOTAL captureWithSelfContainer:', (performance.now() - t0).toFixed(0) + 'ms');
-      return { blob, width, height };
+      return { blob, width, height, pixelRatio };
     } finally {
       wrapper.remove();
     }
@@ -1292,50 +1341,58 @@
     }
   }
 
-  const HEADER_HEIGHT = 72;  // px, height of the branded header bar
-  const LOGO_SIZE = 48;      // px, logo dimensions in the header
+  const HEADER_HEIGHT = 72;  // px, baseline height of the branded header bar
+  const LOGO_SIZE = 48;      // px, baseline logo dimensions in the header
 
-  function drawHeader(ctx, totalWidth, logoImg, bgColor) {
+  function drawHeader(ctx, totalWidth, logoImg, bgColor, effectiveRatio = 1.5) {
     const isDark = isColorDark(bgColor);
+    const headerHeight = Math.round(HEADER_HEIGHT * effectiveRatio);
+    const logoSize = Math.round(LOGO_SIZE * effectiveRatio);
+    const pad = Math.round(CONFIG.padding * effectiveRatio);
+    const borderWidth = Math.max(1, Math.round(1 * effectiveRatio));
     
     // Header background
     ctx.fillStyle = isDark ? '#2a2a2a' : '#f5f5f5';
-    ctx.fillRect(0, 0, totalWidth, HEADER_HEIGHT);
+    ctx.fillRect(0, 0, totalWidth, headerHeight);
     
     // Subtle bottom border
     ctx.fillStyle = isDark ? '#3a3a3a' : '#e0e0e0';
-    ctx.fillRect(0, HEADER_HEIGHT - 1, totalWidth, 1);
+    ctx.fillRect(0, headerHeight - borderWidth, totalWidth, borderWidth);
     
-    let textX = CONFIG.padding + 8;
+    let textX = pad + Math.round(8 * effectiveRatio);
     
     // Draw logo
     if (logoImg) {
-      const logoY = (HEADER_HEIGHT - LOGO_SIZE) / 2;
-      ctx.drawImage(logoImg, CONFIG.padding + 8, logoY, LOGO_SIZE, LOGO_SIZE);
-      textX = CONFIG.padding + 8 + LOGO_SIZE + 12;
+      const logoY = Math.round((headerHeight - logoSize) / 2);
+      ctx.drawImage(logoImg, textX, logoY, logoSize, logoSize);
+      textX += logoSize + Math.round(12 * effectiveRatio);
     }
     
-    // Draw platform name
+    // Draw platform name scaled to high-DPI output
     const displayName = currentAdapter?.displayName || currentAdapter?.name || 'ChatShot';
+    const fontSize = Math.round(20 * effectiveRatio);
     ctx.fillStyle = isDark ? '#ffffff' : '#333333';
-    ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
     ctx.textBaseline = 'middle';
-    ctx.fillText(displayName, textX, HEADER_HEIGHT / 2);
+    ctx.fillText(displayName, textX, headerHeight / 2);
   }
 
   // Unified stitching: masonry layout with configurable column count (1-4).
-  // capturedBlocks: Array<{ blob, width, height }>
+  // capturedBlocks: Array<{ blob, width, height, pixelRatio }>
   // Loads each compressed blob on-demand to minimize memory.
   async function stitchImages(capturedBlocks, logoImg, numCols) {
     if (capturedBlocks.length === 0) return null;
 
+    const effectiveRatio = capturedBlocks[0]?.pixelRatio || 1.5;
+    const scaledPadding = Math.round(CONFIG.padding * effectiveRatio);
+    const scaledHeaderHeight = Math.round(HEADER_HEIGHT * effectiveRatio);
+    const scaledGap = Math.round(16 * effectiveRatio); // 16px proportional column gap
+    const scaledDividerGap = Math.round(4 * effectiveRatio);
+
     const blockWidth = Math.max(...capturedBlocks.map(c => c.width));
-    const gap = 4;        // gap between blocks (px)
-    const dividerGap = 4; // space reserved for divider line
-    const headerOffset = HEADER_HEIGHT;
 
     // Masonry layout: place each block in the shortest column
-    const colHeights = new Array(numCols).fill(CONFIG.padding + headerOffset);
+    const colHeights = new Array(numCols).fill(scaledPadding + scaledHeaderHeight);
     const placements = []; // { blockIdx, x, y, col }
 
     for (let i = 0; i < capturedBlocks.length; i++) {
@@ -1344,14 +1401,14 @@
       for (let c = 1; c < numCols; c++) {
         if (colHeights[c] < colHeights[minCol]) minCol = c;
       }
-      const x = CONFIG.padding + minCol * (blockWidth + gap);
+      const x = scaledPadding + minCol * (blockWidth + scaledGap);
       const y = colHeights[minCol];
       placements.push({ blockIdx: i, x, y, col: minCol });
-      colHeights[minCol] = y + block.height + dividerGap;
+      colHeights[minCol] = y + block.height + scaledDividerGap;
     }
 
-    const totalWidth = CONFIG.padding * 2 + numCols * blockWidth + (numCols - 1) * gap;
-    const totalHeight = Math.max(...colHeights) - dividerGap + CONFIG.padding;
+    const totalWidth = scaledPadding * 2 + numCols * blockWidth + (numCols - 1) * scaledGap;
+    const totalHeight = Math.max(...colHeights) - scaledDividerGap + scaledPadding;
 
     // Canvas hard limits in Chrome: 16384px per side, 16384^2 total area.
     // Beyond them toBlob silently returns null and the user only sees
@@ -1380,13 +1437,15 @@
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, totalWidth, totalHeight);
 
-    drawHeader(ctx, totalWidth, logoImg, bgColor);
+    drawHeader(ctx, totalWidth, logoImg, bgColor, effectiveRatio);
 
     // Draw blocks one at a time, decompressing blobs on-demand
     for (const { blockIdx, x, y } of placements) {
       const block = capturedBlocks[blockIdx];
       const img = await blobToImage(block.blob);
-      ctx.drawImage(img, 0, 0, block.width, block.height, x, y, blockWidth, block.height);
+      // Center the block in column if slightly narrower than max without distortion
+      const drawX = x + Math.round((blockWidth - block.width) / 2);
+      ctx.drawImage(img, 0, 0, block.width, block.height, drawX, y, block.width, block.height);
       // Release the Image element immediately
       img.src = '';
     }
@@ -1395,7 +1454,7 @@
     const isDark = isColorDark(bgColor);
     const lineColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
     ctx.strokeStyle = lineColor;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = Math.max(1, Math.round(1 * effectiveRatio));
 
     // Group placements by column
     const columns = {};
@@ -1407,7 +1466,7 @@
       colBlocks.sort((a, b) => a.y - b.y);
       for (let i = 0; i < colBlocks.length - 1; i++) {
         const block = capturedBlocks[colBlocks[i].blockIdx];
-        const lineY = colBlocks[i].y + block.height + dividerGap / 2;
+        const lineY = colBlocks[i].y + block.height + scaledDividerGap / 2;
         const lineX = colBlocks[i].x;
         ctx.beginPath();
         ctx.moveTo(lineX, lineY);

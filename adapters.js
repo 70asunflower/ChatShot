@@ -36,10 +36,10 @@
     for (const child of Array.from(container.children)) {
       if (cfg.skip && child.matches(cfg.skip)) continue;
 
-      const isDivider = !!cfg.divider && child.matches(cfg.divider);
-      const isSection = !!cfg.section && child.matches(cfg.section);
-      const isCode = !!cfg.code && child.matches(cfg.code);
-      const isTable = !!cfg.table && child.matches(cfg.table);
+      const isDivider = !!cfg.divider && (child.matches(cfg.divider) || !!child.querySelector(cfg.divider));
+      const isSection = !!cfg.section && (child.matches(cfg.section) || !!child.querySelector(cfg.section));
+      const isCode = !!cfg.code && (child.matches(cfg.code) || !!child.querySelector(cfg.code));
+      const isTable = !!cfg.table && (child.matches(cfg.table) || !!child.querySelector(cfg.table));
 
       if (isDivider) {
         if (currentBlock && currentBlock.elements.length > 0) blocks.push(currentBlock);
@@ -74,6 +74,12 @@
     return firstText ? firstText + '...' : `Response ${index + 1}`;
   }
 
+  /** 判断是否属于思考过程或操作按钮类噪音文字 */
+  function isThinkingOrMetadataText(text) {
+    if (!text) return true;
+    return /^(thought for|thinking|深度思考|已思考|思考过程|思考中|copy|retry|edit|share)/i.test(text);
+  }
+
   /**
    * 通用"找前一条用户消息"：
    * 从响应元素向上找到消息容器，再在容器（或其祖先）前面的兄弟节点里
@@ -99,7 +105,7 @@
     while (prev) {
       const target = userSelector ? prev.querySelector(userSelector) : prev;
       const text = target?.textContent?.trim();
-      if (text) return text.slice(0, 20) + (text.length > 20 ? '...' : '');
+      if (text && !isThinkingOrMetadataText(text)) return text.slice(0, 20) + (text.length > 20 ? '...' : '');
       prev = prev.previousElementSibling;
     }
     return null;
@@ -111,7 +117,7 @@
       displayName: 'DeepSeek',
       logo: 'deepseek-color.png',
       host: 'chat.deepseek.com',
-      responseSelector: '.ds-markdown',
+      responseSelector: '.ds-markdown, [class*="ds-markdown"]',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
         code: '.md-code-block, pre',
@@ -120,6 +126,7 @@
       getResponseTitle: (respElement, index) => {
         const text = getUserTextFromPrecedingTurn(respElement, {
           containerSelector: '[class*="message"]',
+          userSelector: '[class*="user"], .fbb737a4',
           fallback: respElement.parentElement
         });
         return text || defaultGetResponseTitle(respElement, index);
@@ -130,7 +137,7 @@
       displayName: 'NotebookLM',
       logo: 'gemini-color.png',
       host: 'notebooklm.google.com',
-      responseSelector: '.to-user-message-card-content .message-text-content',
+      responseSelector: '.to-user-message-card-content .message-text-content, .message-text-content',
       getBlocks: (container) => {
         const blocks = [];
         const paragraphs = container.querySelectorAll('labs-tailwind-structural-element-view-v2');
@@ -169,9 +176,12 @@
       displayName: 'ChatGPT',
       logo: 'openai.png',
       host: 'chatgpt.com',
-      responseSelector: '[data-message-author-role="assistant"] .markdown.prose',
+      responseSelector: '[data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] [class*="markdown"], .markdown.prose',
       getBlocks: (container) => configDrivenGetBlocks(container, {
-        section: 'h2, h3, ol, ul'
+        divider: 'hr',
+        code: 'pre',
+        table: 'table',
+        section: 'h2, h3, h4, ol, ul'
       }),
       getResponseTitle: (respElement, index) => {
         const text = getUserTextFromPrecedingTurn(respElement, {
@@ -187,10 +197,12 @@
       displayName: 'Gemini',
       logo: 'gemini-color.png',
       host: 'gemini.google.com',
-      responseSelector: '.markdown.markdown-main-panel',
+      responseSelector: '.markdown.markdown-main-panel, [class*="markdown-main-panel"], message-content',
       getBlocks: (container) => configDrivenGetBlocks(container, {
-        section: 'h2, h3',
-        divider: 'hr'
+        divider: 'hr',
+        code: 'pre, code-block',
+        table: 'table',
+        section: 'h2, h3, h4'
       }),
       getResponseTitle: (respElement, index) => {
         const text = getUserTextFromPrecedingTurn(respElement, {
@@ -205,10 +217,12 @@
       displayName: 'Doubao',
       logo: 'doubao-color.png',
       host: 'www.doubao.com',
-      responseSelector: '[data-testid="message_text_content"].flow-markdown-body',
+      responseSelector: '[data-testid="message_text_content"].flow-markdown-body, .flow-markdown-body, [data-testid="message_text_content"]',
       getBlocks: (container) => configDrivenGetBlocks(container, {
-        section: 'h2, h3',
         divider: 'hr',
+        code: 'pre',
+        table: 'table',
+        section: 'h2, h3, h4',
         skip: '.md-box-line-break'
       }),
       getResponseTitle: defaultGetResponseTitle
@@ -218,8 +232,11 @@
       displayName: 'Kimi',
       logo: 'kimi-color.png',
       host: 'www.kimi.com',
-      responseSelector: '.markdown',
+      responseSelector: '.markdown, [class*="chat-message-item"] .markdown',
       getBlocks: (container) => configDrivenGetBlocks(container, {
+        divider: 'hr',
+        code: 'pre',
+        table: 'table',
         section: 'h2, h3, h4'
       }),
       getResponseTitle: defaultGetResponseTitle
@@ -229,10 +246,12 @@
       displayName: 'Qianwen',
       logo: 'qwen-color.png',
       host: 'www.qianwen.com',
-      responseSelector: '.qk-markdown',
+      responseSelector: '.qk-markdown, [class*="qk-markdown"]',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr, .qk-md-hr',
-        section: 'h2, h3, .qk-md-head'
+        code: 'pre, .qk-md-code',
+        table: 'table, .qk-md-table',
+        section: 'h2, h3, h4, .qk-md-head'
       }),
       getResponseTitle: defaultGetResponseTitle
     },
@@ -241,7 +260,7 @@
       displayName: 'ChatGLM',
       logo: 'qingyan-color.png',
       host: 'chatglm.cn',
-      responseSelector: '.answer-content-wrap',
+      responseSelector: '.answer-content-wrap, [class*="answer-content-wrap"]',
       // 结构特殊：先收集 markdown-body 与 mermaid(code-no-artifacts) 两轮
       getBlocks: (container) => {
         const blocks = [];
@@ -290,13 +309,15 @@
       displayName: 'Copilot',
       logo: 'copilot-color.png',
       host: 'copilot.microsoft.com',
-      responseSelector: '.group\\/ai-message-item',
+      responseSelector: '.group\\/ai-message-item, [class*="ai-message-item"]',
       getBlocks: (container) => configDrivenGetBlocks(container, {
-        divider: 'div.pb-6, div[class*="after:border-b"]',
-        section: 'h1, h2'
+        divider: 'hr, div.pb-6, div[class*="after:border-b"]',
+        code: 'pre',
+        table: 'table',
+        section: 'h1, h2, h3'
       }),
       getResponseTitle: (respElement, index) => {
-        const heading = respElement.querySelector('h1, h2');
+        const heading = respElement.querySelector('h1, h2, h3');
         if (heading) return heading.textContent?.trim().slice(0, 30) || 'Response ' + (index + 1);
         return defaultGetResponseTitle(respElement, index);
       }
@@ -306,7 +327,7 @@
       displayName: 'Qwen',
       logo: 'qwen-color.png',
       host: 'chat.qwen.ai',
-      responseSelector: '.qwen-markdown',
+      responseSelector: '.qwen-markdown, [class*="qwen-markdown"]',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         skip: '.qwen-markdown-space',
         divider: 'hr, .qwen-markdown-hr',
@@ -317,17 +338,14 @@
       getResponseTitle: defaultGetResponseTitle
     },
     claude: {
-      // ⚠️ Experimental: claude.ai's DOM changes often and these selectors
-      // are best-effort/untested locally. Worst case is a graceful
-      // "No content blocks detected" status — nothing breaks.
       name: 'claude',
       displayName: 'Claude',
       logo: 'claude-color.png',
       host: 'claude.ai',
-      responseSelector: '[data-testid="assistant-message"] .font-claude-message, .font-claude-message',
+      responseSelector: '[data-testid="assistant-message"] .font-claude-message, .font-claude-message, [data-testid="assistant-message"]',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
-        code: 'pre',
+        code: 'pre, [class*="code-block"]',
         table: 'table',
         section: 'h1, h2, h3, h4'
       }),

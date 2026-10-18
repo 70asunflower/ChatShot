@@ -22,6 +22,37 @@
  */
 
 /* ============================================ */
+/* 0. Host Isolation & Reset                    */
+/* ============================================ */
+
+.ds-screenshot-btn,
+.ds-selection-toolbar,
+#ds-selection-toast {
+  all: initial;
+  box-sizing: border-box !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  line-height: 1.4 !important;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ds-screenshot-btn *,
+.ds-selection-toolbar *,
+#ds-selection-toast * {
+  box-sizing: border-box !important;
+  font-family: inherit !important;
+  letter-spacing: normal !important;
+}
+
+.ds-screenshot-btn button,
+.ds-selection-toolbar button {
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ============================================ */
 /* 1. Floating Button Panel                     */
 /* ============================================ */
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatShot",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Capture AI chat responses as screenshots and stitch them for easy sharing",
   "permissions": ["activeTab", "clipboardWrite"],
   "host_permissions": ["https://*/*"],
