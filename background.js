@@ -40,3 +40,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true; // keep sendResponse channel open for async
   }
 });
+
+// Global shortcut relay: content scripts can't register browser-level
+// commands, so the service worker forwards them to the active tab.
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== 'start-selection') return;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab && tab.id && /^https:/i.test(tab.url || '')) {
+      chrome.tabs.sendMessage(tab.id, { type: 'chatshot-shortcut' }).catch(() => {});
+    }
+  } catch { /* no active tab or restricted page */ }
+});

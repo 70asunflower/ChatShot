@@ -48,8 +48,10 @@ AI chat responses are hard to share — screenshots are messy, copy-paste loses 
 | ➖ **Block Dividers** | Subtle separator lines between blocks for clear visual boundaries |
 | 📋 **Auto Clipboard** | Copied to clipboard + downloaded, one click |
 | 🌗 **Theme Detection** | Matches dark/light mode automatically |
-| 🎨 **Full Rendering** | Syntax highlighting, KaTeX math, Mermaid diagrams, tables |
+| 🎨 **Full Rendering** | Syntax highlighting, KaTeX math (with embedded fonts), Mermaid diagrams, tables |
 | 💬 **Response Selector** | Pick any response in the conversation, not just the latest |
+| ⌨️ **Keyboard Shortcut** | `Alt+Shift+S` to start block selection on any supported chat |
+| 🖼 **PNG / JPG Export** | Toggle the download format in the toolbar (clipboard stays PNG) |
 
 ### Column Layouts
 
@@ -80,7 +82,7 @@ Use the stepper (`- N +`) to choose 1–4 columns. Blocks are placed into the sh
 | Qwen | chat.qwen.ai | ✅ |
 | ChatGLM | chatglm.cn | ✅ |
 | Copilot | copilot.microsoft.com | ✅ |
-| Claude | claude.ai | 🔜 |
+| Claude | claude.ai | ⚠️ Experimental |
 
 ## 🚀 Installation
 
@@ -98,15 +100,25 @@ Use the stepper (`- N +`) to choose 1–4 columns. Blocks are placed into the sh
 ## 📖 Usage
 
 1. Open a chat on a supported platform
-2. Choose column count with the stepper (`- 2 +`), then click **Select**
-3. Select / deselect blocks you want to capture
+2. Choose column count with the stepper (`- 2 +`), then click **Select** — or press `Alt+Shift+S`
+3. Select / deselect blocks you want to capture (`Esc` exits selection mode)
 4. *(Optional)* **Ctrl+click** adjacent blocks → **Merge** to combine
-5. Click **Capture** — image is downloaded + copied to clipboard
+5. *(Optional)* Click **PNG** in the toolbar to switch the download format to **JPG**
+6. Click **Capture** — image is downloaded + copied to clipboard
+
+## 🔐 Privacy & Permissions
+
+- **`activeTab`, `clipboardWrite`** — run the picker on the current tab and copy the result.
+- **`host_permissions: https://*/*`** — used only to fetch images that appear *inside* AI responses
+  (they live on arbitrary CDNs and block cross-origin reads). ChatShot's background worker downloads
+  them so screenshots can embed them. ChatShot does no analytics, collects nothing, and talks to no server.
+- Content scripts are injected only on the chat domains listed above.
 
 ## 🛠 Tech Stack
 
 - **Rendering**: [html-to-image](https://github.com/bubkoo/html-to-image) (SVG foreignObject)
-- **Math**: [KaTeX](https://katex.org/) CSS (inline fetched for screenshot compatibility)
+- **Math**: [KaTeX](https://katex.org/) CSS with woff2 fonts embedded as data URIs
+  (regenerate via `node scripts/embed-katex-fonts.mjs` after upgrading KaTeX)
 - **Syntax Highlighting**: Computed style baking (preserves host-page colors)
 - **Manifest**: Chrome Extension Manifest V3
 

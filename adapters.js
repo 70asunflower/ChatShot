@@ -315,6 +315,29 @@
         section: 'h1, h2, h3, .qwen-markdown-heading'
       }),
       getResponseTitle: defaultGetResponseTitle
+    },
+    claude: {
+      // ⚠️ Experimental: claude.ai's DOM changes often and these selectors
+      // are best-effort/untested locally. Worst case is a graceful
+      // "No content blocks detected" status — nothing breaks.
+      name: 'claude',
+      displayName: 'Claude',
+      logo: 'claude-color.png',
+      host: 'claude.ai',
+      responseSelector: '[data-testid="assistant-message"] .font-claude-message, .font-claude-message',
+      getBlocks: (container) => configDrivenGetBlocks(container, {
+        divider: 'hr',
+        code: 'pre',
+        table: 'table',
+        section: 'h1, h2, h3, h4'
+      }),
+      getResponseTitle: (respElement, index) => {
+        const text = getUserTextFromPrecedingTurn(respElement, {
+          containerSelector: '[data-test-render-count], [data-testid="conversation-turn"]',
+          userSelector: '[data-testid="user-message"]'
+        });
+        return text || defaultGetResponseTitle(respElement, index);
+      }
     }
   };
 

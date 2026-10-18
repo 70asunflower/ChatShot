@@ -41,6 +41,9 @@
     padding: 20         // outer padding of the final image (px)
   };
 
+  const IMAGE_FETCH_TIMEOUT_MS = 10000; // per-image fetch timeout (matches background.js)
+  const JPEG_QUALITY = 0.92;            // used when the user picks JPG download format
+
   // ====================================================================
   // SECTION: Platform Adapters
   // LLM_ADAPTERS 定义在 adapters.js（window.ChatShotAdapters），
@@ -72,6 +75,9 @@
   let detectedBgColor = null;       // cached background color for current capture session
   let isCancelled = false;         // capture cancellation flag
   let cachedOncloneCssText = null; // CSS cache per capture session
+  let cachedKatexCss = null;       // KaTeX CSS with embedded fonts — static, cache forever
+  let statusTimer = null;          // pending showStatus auto-clear timer
+  let outputFormat = 'png';        // 'png' | 'jpeg' — download format (clipboard is always PNG)
 
   // --- Selection mode state ---
   let isSelectionMode = false;
@@ -124,6 +130,7 @@
         <button id="ds-col-inc" class="ds-stepper-btn" title="More columns">+</button>
       </div>
       <div class="ds-toolbar-separator"></div>
+      <button id="ds-format-toggle" class="ds-btn-ghost" title="Download format (clipboard is always PNG)">PNG</button>
       <button id="ds-confirm-capture">Capture</button>
       <button id="ds-cancel-selection">Cancel</button>
     `;
@@ -155,6 +162,20 @@
     document.getElementById('ds-select-none').addEventListener('click', selectNoBlocks);
     document.getElementById('ds-merge-blocks').addEventListener('click', mergeSelectedBlocks);
     document.getElementById('ds-unmerge-block').addEventListener('click', unmergeSelectedBlock);
+    document.getElementById('ds-format-toggle').addEventListener('click', () => {
+      outputFormat = outputFormat === 'png' ? 'jpeg' : 'png';
+      document.getElementById('ds-format-toggle').textContent = outputFormat === 'png' ? 'PNG' : 'JPG';
+    });
+
+    // Keyboard: Escape leaves selection mode. The global shortcut
+    // (Alt+Shift+S) can't be bound by a content script — background.js
+    // receives the command and relays it here as a message.
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isSelectionMode) exitSelectionMode();
+    });
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg && msg.type === 'chatshot-shortcut' && !isSelectionMode) enterSelectionMode();
+    });
 
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.ds-response-selector')) {
@@ -211,8 +232,14 @@
     const statusEl = document.getElementById('ds-status');
     statusEl.textContent = message;
     statusEl.className = 'ds-screenshot-status show ' + type;
+    // Cancel any pending auto-clear first, or a stale timer from a previous
+    // status would clear this one early.
+    if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
     if (type !== 'info') {
-      setTimeout(() => { statusEl.className = 'ds-screenshot-status'; }, 3000);
+      statusTimer = setTimeout(() => {
+        statusEl.className = 'ds-screenshot-status';
+        statusTimer = null;
+      }, 3000);
     }
   }
 
@@ -291,7 +318,8 @@
     
     // Add throttled scroll listener (rAF-batched to avoid blocking scroll)
     window.addEventListener('scroll', scheduleOverlayUpdate, true);
-    
+    window.addEventListener('resize', scheduleOverlayUpdate);
+
     if (detectedBlocks[0]?.elements[0]) {
       detectedBlocks[0].elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -305,6 +333,7 @@
     mergeSelectedIndices.clear();
 
     window.removeEventListener('scroll', scheduleOverlayUpdate, true);
+    window.removeEventListener('resize', scheduleOverlayUpdate);
     document.getElementById('ds-selection-toolbar').classList.remove('visible');
     document.getElementById('ds-selection-toolbar').classList.remove('show');
     document.querySelector('.ds-screenshot-btn').style.display = '';
@@ -847,6 +876,7 @@
       await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
       const capturedBlocks = [];
+      let failedBlockCount = 0;
       const captureStart = performance.now();
       for (let i = 0; i < blocks.length; i++) {
         if (isCancelled) {
@@ -854,22 +884,29 @@
           return;
         }
         showStatus(`Capturing (${i + 1}/${blocks.length})...`, 'info');
-        
+
         // Allow UI to update between captures
         await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
-        
+
         try {
           const result = await captureWithRetry(blocks[i], maxWidth, blocks.length);
           capturedBlocks.push(result);
         } catch (err) {
-          console.error('[ChatShot] Block', i + 1, 'FAILED:', err.message);
-          throw err;
+          // Skip the failed block and keep going — one bad block (broken
+          // image, odd CSS) shouldn't throw away everything captured so far.
+          console.error('[ChatShot] Block', i + 1, 'FAILED, skipping:', err.message);
+          failedBlockCount++;
         }
       }
       DEBUG && console.log('[ChatShot] TOTAL capture all blocks:', (performance.now() - captureStart).toFixed(0) + 'ms', '(' + blocks.length + ' blocks)');
 
       if (isCancelled) {
         showStatus('Cancelled', 'error');
+        return;
+      }
+
+      if (capturedBlocks.length === 0) {
+        showStatus('All blocks failed to capture', 'error');
         return;
       }
 
@@ -890,12 +927,17 @@
 
       // Always download + copy to clipboard
       await downloadImage(finalCanvas);
+      const skippedNote = failedBlockCount > 0
+        ? ` (${failedBlockCount} block${failedBlockCount > 1 ? 's' : ''} failed, skipped)`
+        : '';
       try {
         await copyImageToClipboard(finalCanvas);
-        showStatus('Downloaded & copied to clipboard!', 'success');
+        showStatus('Downloaded & copied to clipboard!' + skippedNote,
+          failedBlockCount > 0 ? 'error' : 'success');
       } catch (e) {
         DEBUG && console.warn('[ChatShot] Clipboard failed:', e);
-        showStatus('Downloaded! (clipboard not supported)', 'success');
+        showStatus('Downloaded!' + skippedNote + ' (clipboard not supported)',
+          failedBlockCount > 0 ? 'error' : 'success');
       }
 
     } catch (error) {
@@ -1002,6 +1044,19 @@
   }
 
   // ====== Image Inline ======
+  // Bounded fetch so a hanging image CDN can't stall the whole capture.
+  // (The background-script fallback path has its own timeout; the direct
+  // content-script fetch needs one too.)
+  async function fetchImageWithTimeout(url, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { mode: 'cors', credentials: 'include', signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   function blobToDataURL(blob) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1032,9 +1087,9 @@
       if (src.startsWith('//')) src = 'https:' + src;
       if (!/^https?:\/\//i.test(src)) return;
 
-      // Strategy 1: content script direct fetch
+      // Strategy 1: content script direct fetch (with timeout)
       try {
-        const resp = await fetch(src, { mode: 'cors', credentials: 'include' });
+        const resp = await fetchImageWithTimeout(src, IMAGE_FETCH_TIMEOUT_MS);
         if (resp.ok) {
           const blob = await resp.blob();
           const dataUrl = await blobToDataURL(blob);
@@ -1132,8 +1187,11 @@
         const katexStyleEl = inner.querySelector('style[data-katex-css]');
         if (katexStyleEl && !katexStyleEl.textContent) {
           try {
-            const resp = await fetch(chrome.runtime.getURL('lib/katex.min.css'));
-            katexStyleEl.textContent = await resp.text();
+            if (!cachedKatexCss) {
+              const resp = await fetch(chrome.runtime.getURL('lib/katex.min.css'));
+              cachedKatexCss = await resp.text();
+            }
+            katexStyleEl.textContent = cachedKatexCss;
           } catch (e) {
             DEBUG && console.warn('[ChatShot] Failed to load KaTeX CSS:', e);
           }
@@ -1185,7 +1243,11 @@
           // often injects @font-face via <style>, not <link>, and the rule-type
           // filter above only covers document.styleSheets).
           clonedDoc.querySelectorAll('style').forEach(s => {
-            s.textContent = s.textContent.replace(/@font-face\s*\{[^}]*\}/g, '');
+            // Strip external @font-face rules (host-page fonts would trigger
+            // fetch/decode errors inside the SVG) but keep data-URI rules —
+            // those are our self-contained KaTeX fonts.
+            s.textContent = s.textContent.replace(/@font-face\s*\{[^}]*\}/g, (rule) =>
+              rule.includes('data:font') ? rule : '');
           });
         },
       });
@@ -1291,10 +1353,29 @@
     const totalWidth = CONFIG.padding * 2 + numCols * blockWidth + (numCols - 1) * gap;
     const totalHeight = Math.max(...colHeights) - dividerGap + CONFIG.padding;
 
+    // Canvas hard limits in Chrome: 16384px per side, 16384^2 total area.
+    // Beyond them toBlob silently returns null and the user only sees
+    // "failed to generate image" — downscale the whole output instead.
+    const MAX_CANVAS_SIDE = 16384;
+    const MAX_CANVAS_AREA = MAX_CANVAS_SIDE * MAX_CANVAS_SIDE;
+    let outputScale = 1;
+    if (totalWidth > MAX_CANVAS_SIDE || totalHeight > MAX_CANVAS_SIDE ||
+        totalWidth * totalHeight > MAX_CANVAS_AREA) {
+      outputScale = Math.max(0.01, Math.min(
+        MAX_CANVAS_SIDE / totalWidth,
+        MAX_CANVAS_SIDE / totalHeight,
+        Math.sqrt(MAX_CANVAS_AREA / (totalWidth * totalHeight))
+      ));
+      console.warn('[ChatShot] Output', totalWidth + 'x' + totalHeight,
+        'exceeds canvas limits, downscaling to', Math.round(outputScale * 100) + '%');
+    }
+
     const finalCanvas = document.createElement('canvas');
-    finalCanvas.width = totalWidth;
-    finalCanvas.height = totalHeight;
+    finalCanvas.width = Math.max(1, Math.round(totalWidth * outputScale));
+    finalCanvas.height = Math.max(1, Math.round(totalHeight * outputScale));
     const ctx = finalCanvas.getContext('2d');
+    // Draw everything in logical coordinates; the transform handles scaling.
+    if (outputScale < 1) ctx.scale(outputScale, outputScale);
     const bgColor = detectedBgColor || '#ffffff';
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, totalWidth, totalHeight);
@@ -1338,32 +1419,37 @@
     return finalCanvas;
   }
 
+  // Resolves once the download has actually been triggered (toBlob included),
+  // so callers can sequence clipboard-copy and status messages after it.
   function downloadImage(canvas) {
-    const now = new Date();
-    const ts = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') +
-      String(now.getDate()).padStart(2,'0') + '_' + String(now.getHours()).padStart(2,'0') +
-      String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
-    const platformName = (currentAdapter?.displayName || currentAdapter?.name || 'chatshot')
-      .toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const filename = platformName + '_' + ts + '.png';
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        console.error('[ChatShot] toBlob returned null');
-        showStatus('Error: Failed to generate image', 'error');
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
-    }, 'image/png');
+    return new Promise((resolve, reject) => {
+      const now = new Date();
+      const ts = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') +
+        String(now.getDate()).padStart(2,'0') + '_' + String(now.getHours()).padStart(2,'0') +
+        String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
+      const platformName = (currentAdapter?.displayName || currentAdapter?.name || 'chatshot')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const isJpeg = outputFormat === 'jpeg';
+      const filename = platformName + '_' + ts + (isJpeg ? '.jpg' : '.png');
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Failed to generate image'));
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          resolve();
+        }, 100);
+      }, isJpeg ? 'image/jpeg' : 'image/png', JPEG_QUALITY);
+    });
   }
 
   async function copyImageToClipboard(canvas) {

@@ -1,12 +1,20 @@
 {
   "manifest_version": 3,
   "name": "ChatShot",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Capture AI chat responses as screenshots and stitch them for easy sharing",
   "permissions": ["activeTab", "clipboardWrite"],
   "host_permissions": ["https://*/*"],
   "background": {
     "service_worker": "background.js"
+  },
+  "commands": {
+    "start-selection": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "Start block selection on the current AI chat page"
+    }
   },
   "icons": {
     "16": "icons/icon16.png",
@@ -26,7 +34,8 @@
         "https://www.qianwen.com/*",
         "https://chatglm.cn/*",
         "https://copilot.microsoft.com/*",
-        "https://chat.qwen.ai/*"
+        "https://chat.qwen.ai/*",
+        "https://claude.ai/*"
       ],
       "js": ["lib/html-to-image.js", "adapters.js", "content.js"],
       "css": ["content.css"]
@@ -34,8 +43,20 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["logos/*.png", "lib/katex.min.js", "lib/katex.min.css", "lib/html-to-image.js"],
-      "matches": ["<all_urls>"]
+      "resources": ["logos/*.png", "lib/katex.min.css"],
+      "matches": [
+        "https://chat.deepseek.com/*",
+        "https://notebooklm.google.com/*",
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://www.doubao.com/*",
+        "https://www.kimi.com/*",
+        "https://www.qianwen.com/*",
+        "https://chatglm.cn/*",
+        "https://copilot.microsoft.com/*",
+        "https://chat.qwen.ai/*",
+        "https://claude.ai/*"
+      ]
     }
   ]
 }

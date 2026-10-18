@@ -13,3 +13,5 @@ Thumbs.db
 *.log
 *.tmp
 .gstack/
+# Test profiles / local test artifacts 
+.chrome-test-profile/ 
