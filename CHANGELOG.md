@@ -2,6 +2,23 @@
 
 本文件是多个 AI 会话/人协作改这个仓库时的唯一变更台账。**约定：每次改版本号，必须在这里加一节**；提交信息用语义化前缀（feat/fix/refactor）。
 
+## 1.5.4 — 2026-10-19（逐站真机核对）
+
+逐站打开真实会话页核对适配器（qwen/kimi/doubao/chatglm/qianwen/chatgpt/gemini/claude/copilot/notebooklm）。**三个站点前端已改版、旧适配器完全失效**，全部按真机 DOM 重写；每处改动补进冒烟测试固定件。
+
+### Fixed
+- **chatgpt（改版失效重写）**：`data-message-author-role`/`.markdown`/`.prose` 已全部移除。新正文根是 CSS-Module 类 `MarkdownRoot-<hash>`（前缀稳定）；用户消息发 markdown 时也含 mdRoot，新增适配器级 `filterResponse` 钩子（content.js 选块与下拉都会应用）排除 `user-message` 包装内的根；正文外有单子元素匿名包装层，getBlocks 先穿透包装层再切块，否则塌缩成 1 块。
+- **doubao（改版失效重写）**：`flow-markdown-body` 与全部语义类消失（全哈希）。改用语义 testid：`[data-testid="receive_message"] [data-testid="message_text_content"]`。标题改用结构化攀爬（真机验证：正确返回用户提问，跳过"已完成思考"噪音头——噪音正则补充 已完成思考/已完成/思考完成）。
+- **claude（改版失效重写）**：`.font-claude-message` 移除，正文容器改为 `[data-testid="assistant-message"] .standard-markdown`（外层 `.font-claude-response` 只是样式壳）；表格在 `.md-table-scroll` 包装内，加入 table 配置。
+
+### Changed
+- **qwenai**：table 配置显式加入 `.qwen-markdown-table-wrapper`（真机确认表格的实际直接子元素是包装层）。
+- **qianwen**：（侦察确认健康，未改动；表格依赖子扫描命中 `.qk-md-table-section`）。
+
+### 验证状态
+- 真机核对通过：qwen / doubao / qianwen / chatgpt / gemini / claude / notebooklm
+- 未验证（登录墙/策略拦截，配置维持现状）：kimi、chatglm（未登录）、copilot（导航被浏览器策略拒绝）
+
 ## 1.5.3 — 2026-10-19
 
 ### Fixed

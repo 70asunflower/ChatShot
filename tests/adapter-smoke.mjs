@@ -114,11 +114,14 @@ class El {
 }
 const el = (tag, cls, attrs) => new El(tag, cls, attrs);
 
-// Mirrors content.js latestResponseElement(): outermost matches only.
+// Mirrors content.js latestResponseElement(): outermost matches only,
+// plus the adapter's optional filterResponse hook (e.g. ChatGPT excludes
+// markdown roots that live inside user messages).
 function resolveLatest(adapter, root) {
   const all = root.querySelectorAll(adapter.responseSelector);
   const outer = all.filter(n => !(n.parentElement && n.parentElement.closest(adapter.responseSelector)));
-  return { all, outer, latest: outer.length ? outer[outer.length - 1] : null };
+  const filtered = adapter.filterResponse ? outer.filter(n => adapter.filterResponse(n)) : outer;
+  return { all, outer, latest: filtered.length ? filtered[filtered.length - 1] : null };
 }
 
 // ---------------------------------------------------------------------------
@@ -166,21 +169,30 @@ const FIXTURES = [
   },
   {
     name: 'chatgpt',
-    minBlocks: 4, needTypes: ['code'],
+    minBlocks: 3, needTypes: ['code', 'table'],
     build() {
-      const container = el('div', 'markdown prose').add(
-        el('h2', '', {}).add('T'),
-        el('p', '', {}).add('a'),
-        el('ul', '', {}).add(el('li', '', {}).add('x'), el('li', '', {}).add('y'), el('li', '', {}).add('z')),
-        el('ol', '', {}).add(el('li', '', {}).add('1'), el('li', '', {}).add('2')),
-        el('p', '', {}).add('b'),
-        codePre()
+      // 2026-10 新版结构：MarkdownRoot-<hash> 根 + 单子元素匿名包装层；
+      // 用户消息发 markdown 时也有 mdRoot，需 filterResponse 排除。
+      const blocks = el('div', 'my-4').add(
+        el('div', 'stream-content').add(
+          el('h2', '', {}).add('T'),
+          el('p', '', {}).add('a'),
+          el('p', '', {}).add('b'),
+          codePre(),
+          table()
+        )
       );
-      const root = el('div', '', {}).add(
-        el('div', '', { 'data-message-author-role': 'user' }).add('q1'),
-        el('div', '', { 'data-message-author-role': 'assistant' }).add(container)
+      const assistantRoot = el('div', 'MarkdownRoot-rZKhxa').add(blocks);
+      const userRoot = el('div', 'MarkdownRoot-rZKhxa').add(
+        el('div', 'my-4').add(el('p', '').add('user markdown'))
       );
-      return { root, container };
+      const root = el('div', '').add(
+        el('div', 'user-message-wrap').add(
+          el('div', 'group/user-message').add(userRoot)
+        ),
+        assistantRoot
+      );
+      return { root, container: assistantRoot };
     }
   },
   {
@@ -205,17 +217,37 @@ const FIXTURES = [
   },
   {
     name: 'doubao',
-    minBlocks: 3, needTypes: ['table'],
+    minBlocks: 4, needTypes: ['table'],
+    titleIncludes: '用户问题文本',
     build() {
-      const container = el('div', 'flow-markdown-body', { 'data-testid': 'message_text_content' }).add(
-        el('h2', '', {}).add('T'),
-        el('p', '', {}).add('a'),
-        el('div', 'md-box-line-break').add(' '),
+      // 2026-10 新版结构：全哈希类，语义 testid 划分角色。
+      const container = el('div', 'container-qX9Csx md-box-root', { 'data-testid': 'message_text_content' }).add(
+        el('div', 'container-fBOrXO').add('段落一'),
+        el('div', 'container-fBOrXO').add('段落二'),
         el('hr', '', {}),
-        el('p', '', {}).add('b'),
-        table()
+        el('div', 'container-fBOrXO').add('段落三'),
+        el('div', 'container-fBOrXO').add(table()),
+        el('div', 'container-fBOrXO').add('段落四')
       );
-      return { root: el('div', '', {}).add(container), container };
+      const root = el('div', 'message-list').add(
+        el('div', '', { 'data-testid': 'union_message' }).add(
+          el('div', 'flex justify-end').add(
+            el('div', '', { 'data-testid': 'send_message' }).add(
+              el('div', 'container-h3Yzeb').add(
+                el('div', 'container-qX9Csx', { 'data-testid': 'message_text_content' }).add('用户问题文本')
+              )
+            )
+          )
+        ),
+        el('div', '', { 'data-testid': 'union_message' }).add(
+          el('div', '', { 'data-testid': 'receive_message' }).add(
+            el('div', 'blockLayout-GgvoM6').add(
+              el('div', 'container-h3Yzeb').add(container)
+            )
+          )
+        )
+      );
+      return { root, container };
     }
   },
   {
@@ -269,17 +301,18 @@ const FIXTURES = [
   },
   {
     name: 'qwenai',
-    minBlocks: 4, needTypes: ['code'],
+    minBlocks: 5, needTypes: ['code', 'table'],
     build() {
       const container = el('div', 'qwen-markdown').add(
         el('div', 'qwen-markdown-space').add(' '),
-        el('p', '', {}).add('a'),
+        el('div', 'qwen-markdown-paragraph').add('a'),
         el('div', 'qwen-markdown-hr').add(' '),
         el('div', 'qwen-markdown-space').add(' '),
-        el('p', '', {}).add('b'),
-        el('h2', 'qwen-markdown-heading').add('T'),
-        el('p', '', {}).add('c'),
-        el('pre', 'qwen-markdown-code').add(el('code', '', {}).add('x'))
+        el('div', 'qwen-markdown-paragraph').add('b'),
+        el('h3', 'qwen-markdown-heading').add('T'),
+        el('div', 'qwen-markdown-paragraph').add('c'),
+        el('pre', 'qwen-markdown-code').add(el('code', '', {}).add('x')),
+        el('div', 'qwen-markdown-table-wrapper').add(table())
       );
       return { root: el('div', '', {}).add(container), container };
     }
@@ -308,17 +341,20 @@ const FIXTURES = [
     name: 'claude',
     minBlocks: 3, needTypes: ['table'],
     build() {
-      const container = el('div', 'font-claude-message').add(
-        el('h2', '', {}).add('T'),
+      // 2026-10 新版结构：assistant-message > font-claude-response 壳 >
+      // standard-markdown 正文容器（表格在 .md-table-scroll 包装内）。
+      const container = el('div', '_blocks_4za3l_47 standard-markdown').add(
         el('p', '', {}).add('a'),
+        el('div', 'md-table-scroll').add(table()),
         el('p', '', {}).add('b'),
-        el('hr', '', {}),
-        el('p', '', {}).add('c'),
-        table()
+        el('ul', '').add(el('li', '').add('x')),
+        el('p', '').add('c')
       );
-      const root = el('div', '', { 'data-test-render-count': '1' }).add(
+      const root = el('div', '').add(
         el('div', '', { 'data-testid': 'user-message' }).add('user q'),
-        el('div', '', { 'data-testid': 'assistant-message' }).add(container)
+        el('div', '', { 'data-testid': 'assistant-message' }).add(
+          el('div', 'font-claude-response').add(container)
+        )
       );
       return { root, container };
     }

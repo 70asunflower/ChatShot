@@ -77,7 +77,28 @@
   /** 判断是否属于思考过程或操作按钮类噪音文字 */
   function isThinkingOrMetadataText(text) {
     if (!text) return true;
-    return /^(thought for|thinking|深度思考|已思考|思考过程|思考中|copy|retry|edit|share)/i.test(text);
+    return /^(thought for|thinking|深度思考|已思考|已完成思考|已完成|思考过程|思考中|思考完成|copy|retry|edit|share)/i.test(text);
+  }
+
+  /**
+   * 结构化攀爬取标题：从回答容器逐层向上，每层检查前兄弟节点的文本，
+   * 第一个非"思考/操作噪音"的即用户提问。与类名无关——全哈希类站点
+   * （deepseek/doubao 等）也不随发版轮换失效。
+   */
+  function titleFromPrecedingTurnClimb(respElement, index) {
+    let cur = respElement;
+    while (cur.parentElement) {
+      cur = cur.parentElement;
+      let prev = cur.previousElementSibling;
+      while (prev) {
+        const text = (prev.textContent || '').trim();
+        if (text && !isThinkingOrMetadataText(text)) {
+          return text.slice(0, 20) + (text.length > 20 ? '...' : '');
+        }
+        prev = prev.previousElementSibling;
+      }
+    }
+    return defaultGetResponseTitle(respElement, index);
   }
 
   /**
@@ -125,24 +146,7 @@
         code: '.md-code-block, pre',
         table: '.ds-scroll-area, table'
       }),
-      getResponseTitle: (respElement, index) => {
-        // DeepSeek 行类全是随发版轮换的哈希类，无法用选择器锚定"上一条用户消息"；
-        // 且 [class*="message"] 会匹配回答容器自身（assistant-message-* 含 message）。
-        // 改为结构化攀爬：向上找第一个"前兄弟含非噪音文本"的层级，即用户提问行。
-        let cur = respElement;
-        while (cur.parentElement) {
-          cur = cur.parentElement;
-          let prev = cur.previousElementSibling;
-          while (prev) {
-            const text = (prev.textContent || '').trim();
-            if (text && !isThinkingOrMetadataText(text)) {
-              return text.slice(0, 20) + (text.length > 20 ? '...' : '');
-            }
-            prev = prev.previousElementSibling;
-          }
-        }
-        return defaultGetResponseTitle(respElement, index);
-      }
+      getResponseTitle: titleFromPrecedingTurnClimb
     },
     notebooklm: {
       name: 'notebooklm',
@@ -184,25 +188,31 @@
       }
     },
     chatgpt: {
+      // 2026-10 改版后：data-message-author-role / .markdown / .prose 全部移除，
+      // 正文根是 CSS-Module 类 MarkdownRoot-<hash>（前缀稳定、后缀随构建轮换；
+      // 用户消息发 markdown 时也会出现，需 filterResponse 排除）。
       name: 'chatgpt',
       displayName: 'ChatGPT',
       logo: 'openai.png',
       host: 'chatgpt.com',
-      responseSelector: '[data-message-author-role="assistant"] .markdown.prose, [data-message-author-role="assistant"] .markdown',
-      getBlocks: (container) => configDrivenGetBlocks(container, {
-        divider: 'hr',
-        code: 'pre',
-        table: 'table',
-        section: 'h2, h3, h4, ol, ul'
-      }),
-      getResponseTitle: (respElement, index) => {
-        const text = getUserTextFromPrecedingTurn(respElement, {
-          containerSelector: '[data-message-author-role="assistant"]',
-          userSelector: '[data-message-author-role="user"]',
-          startFromAncestor: 2
+      responseSelector: '[class*="MarkdownRoot"]',
+      filterResponse: (el) => !el.closest('[class*="user-message"]'),
+      // 助手正文外常有一层单子元素的匿名 DIV 包装，直接切块会塌缩成 1 块；
+      // 穿透包装层直到出现真正的多块结构。
+      getBlocks: (container) => {
+        let inner = container;
+        while (inner.children.length === 1 &&
+               inner.children[0].querySelector('h1,h2,h3,h4,p,ul,ol,pre,table,hr')) {
+          inner = inner.children[0];
+        }
+        return configDrivenGetBlocks(inner, {
+          divider: 'hr',
+          code: 'pre',
+          table: 'table',
+          section: 'h2, h3, h4'
         });
-        return text || defaultGetResponseTitle(respElement, index);
-      }
+      },
+      getResponseTitle: defaultGetResponseTitle
     },
     gemini: {
       name: 'gemini',
@@ -227,21 +237,20 @@
       }
     },
     doubao: {
+      // 2026-10 改版后 flow-markdown-body 及全部语义类消失（全哈希）；
+      // 语义 data-testid 仍在：receive_message=助手 / send_message=用户。
       name: 'doubao',
       displayName: 'Doubao',
       logo: 'doubao-color.png',
       host: 'www.doubao.com',
-      // 不列父级（裸 [data-testid="message_text_content"]）：同上，避免最外层
-      // 过滤选中 markdown 的父级容器。
-      responseSelector: '[data-testid="message_text_content"].flow-markdown-body, .flow-markdown-body',
+      responseSelector: '[data-testid="receive_message"] [data-testid="message_text_content"]',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
         code: 'pre',
         table: 'table',
-        section: 'h2, h3, h4',
-        skip: '.md-box-line-break'
+        section: 'h2, h3, h4'
       }),
-      getResponseTitle: defaultGetResponseTitle
+      getResponseTitle: titleFromPrecedingTurnClimb
     },
     kimi: {
       name: 'kimi',
@@ -348,7 +357,7 @@
         skip: '.qwen-markdown-space',
         divider: 'hr, .qwen-markdown-hr',
         code: 'pre, .qwen-markdown-code',
-        table: 'table, .qwen-markdown-table',
+        table: 'table, .qwen-markdown-table, .qwen-markdown-table-wrapper',
         section: 'h1, h2, h3, .qwen-markdown-heading'
       }),
       getResponseTitle: defaultGetResponseTitle
@@ -358,13 +367,14 @@
       displayName: 'Claude',
       logo: 'claude-color.png',
       host: 'claude.ai',
-      // 不列祖先元素（[data-testid="assistant-message"]）：最外层过滤会选中它
-      // 而不是内层 markdown 容器，导致块解析塌缩。
-      responseSelector: '[data-testid="assistant-message"] .font-claude-message, .font-claude-message',
+      // 2026-10 改版后：font-claude-message 移除。正文容器是 assistant-message
+      // 下的 .standard-markdown（外层 .font-claude-response 只是样式壳，
+      // 直接切块会因单包装子元素而塌缩）。
+      responseSelector: '[data-testid="assistant-message"] .standard-markdown',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
-        code: 'pre, [class*="code-block"]',
-        table: 'table',
+        code: 'pre',
+        table: 'table, .md-table-scroll',
         section: 'h1, h2, h3, h4'
       }),
       getResponseTitle: (respElement, index) => {

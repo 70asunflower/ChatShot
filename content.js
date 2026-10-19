@@ -230,7 +230,8 @@
     }
 
     const responses = Array.from(document.querySelectorAll(currentAdapter.responseSelector))
-      .filter(el => !(el.parentElement && el.parentElement.closest(currentAdapter.responseSelector)));
+      .filter(el => !(el.parentElement && el.parentElement.closest(currentAdapter.responseSelector)))
+      .filter(el => !currentAdapter.filterResponse || currentAdapter.filterResponse(el));
     listEl.innerHTML = '';
 
     const latestItem = document.createElement('div');
@@ -1054,7 +1055,8 @@
   // one block, which is the bug this guard exists for.
   function latestResponseElement() {
     const responses = Array.from(document.querySelectorAll(currentAdapter.responseSelector))
-      .filter(el => !(el.parentElement && el.parentElement.closest(currentAdapter.responseSelector)));
+      .filter(el => !(el.parentElement && el.parentElement.closest(currentAdapter.responseSelector)))
+      .filter(el => !currentAdapter.filterResponse || currentAdapter.filterResponse(el));
     return responses.length > 0 ? responses[responses.length - 1] : null;
   }
 
