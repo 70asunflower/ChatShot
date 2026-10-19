@@ -1,10 +1,11 @@
 {
   "name": "chatshot",
-  "version": "1.5.1",
+  "version": "1.5.3",
   "description": "Capture AI chat responses as beautiful screenshots and stitch them for easy sharing",
   "type": "module",
   "scripts": {
-    "build:fonts": "node scripts/embed-katex-fonts.mjs"
+    "build:fonts": "node scripts/embed-katex-fonts.mjs",
+    "test": "node tests/adapter-smoke.mjs"
   },
   "keywords": [
     "chrome-extension",

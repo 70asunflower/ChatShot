@@ -117,19 +117,31 @@
       displayName: 'DeepSeek',
       logo: 'deepseek-color.png',
       host: 'chat.deepseek.com',
-      responseSelector: '.ds-markdown',
+      // 限定主正文容器：裸 .ds-markdown 还包括"思考流"内容（ds-think-content 内），
+      // 会污染回答下拉且流式生成中可能选错容器（2026-10 真机 DOM 确认）。
+      responseSelector: '.ds-markdown.ds-assistant-message-main-content',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
         code: '.md-code-block, pre',
         table: '.ds-scroll-area, table'
       }),
       getResponseTitle: (respElement, index) => {
-        const text = getUserTextFromPrecedingTurn(respElement, {
-          containerSelector: '[class*="message"]',
-          userSelector: '[class*="user"], .fbb737a4',
-          fallback: respElement.parentElement
-        });
-        return text || defaultGetResponseTitle(respElement, index);
+        // DeepSeek 行类全是随发版轮换的哈希类，无法用选择器锚定"上一条用户消息"；
+        // 且 [class*="message"] 会匹配回答容器自身（assistant-message-* 含 message）。
+        // 改为结构化攀爬：向上找第一个"前兄弟含非噪音文本"的层级，即用户提问行。
+        let cur = respElement;
+        while (cur.parentElement) {
+          cur = cur.parentElement;
+          let prev = cur.previousElementSibling;
+          while (prev) {
+            const text = (prev.textContent || '').trim();
+            if (text && !isThinkingOrMetadataText(text)) {
+              return text.slice(0, 20) + (text.length > 20 ? '...' : '');
+            }
+            prev = prev.previousElementSibling;
+          }
+        }
+        return defaultGetResponseTitle(respElement, index);
       }
     },
     notebooklm: {
@@ -197,7 +209,9 @@
       displayName: 'Gemini',
       logo: 'gemini-color.png',
       host: 'gemini.google.com',
-      responseSelector: '.markdown.markdown-main-panel, message-content',
+      // 不列祖先元素（message-content）：最外层过滤会选中外层容器，
+      // 导致 getBlocks 只见到 1 个 markdown 子元素。
+      responseSelector: '.markdown.markdown-main-panel',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
         code: 'pre, code-block',
@@ -217,7 +231,9 @@
       displayName: 'Doubao',
       logo: 'doubao-color.png',
       host: 'www.doubao.com',
-      responseSelector: '[data-testid="message_text_content"].flow-markdown-body, .flow-markdown-body, [data-testid="message_text_content"]',
+      // 不列父级（裸 [data-testid="message_text_content"]）：同上，避免最外层
+      // 过滤选中 markdown 的父级容器。
+      responseSelector: '[data-testid="message_text_content"].flow-markdown-body, .flow-markdown-body',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
         code: 'pre',
@@ -342,7 +358,9 @@
       displayName: 'Claude',
       logo: 'claude-color.png',
       host: 'claude.ai',
-      responseSelector: '[data-testid="assistant-message"] .font-claude-message, .font-claude-message, [data-testid="assistant-message"]',
+      // 不列祖先元素（[data-testid="assistant-message"]）：最外层过滤会选中它
+      // 而不是内层 markdown 容器，导致块解析塌缩。
+      responseSelector: '[data-testid="assistant-message"] .font-claude-message, .font-claude-message',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
         code: 'pre, [class*="code-block"]',
