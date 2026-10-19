@@ -229,7 +229,8 @@
       return;
     }
 
-    const responses = document.querySelectorAll(currentAdapter.responseSelector);
+    const responses = Array.from(document.querySelectorAll(currentAdapter.responseSelector))
+      .filter(el => !(el.parentElement && el.parentElement.closest(currentAdapter.responseSelector)));
     listEl.innerHTML = '';
 
     const latestItem = document.createElement('div');
@@ -1044,7 +1045,16 @@
     if (selectedResponseEl && document.contains(selectedResponseEl)) {
       return selectedResponseEl;
     }
-    const responses = document.querySelectorAll(currentAdapter.responseSelector);
+    return latestResponseElement();
+  }
+
+  // Outermost matches only: a selector that also hits descendants (container
+  // vs. its own paragraphs, e.g. ".ds-markdown" vs ".ds-markdown-paragraph")
+  // must never let a leaf win — getBlocks on a single paragraph yields exactly
+  // one block, which is the bug this guard exists for.
+  function latestResponseElement() {
+    const responses = Array.from(document.querySelectorAll(currentAdapter.responseSelector))
+      .filter(el => !(el.parentElement && el.parentElement.closest(currentAdapter.responseSelector)));
     return responses.length > 0 ? responses[responses.length - 1] : null;
   }
 

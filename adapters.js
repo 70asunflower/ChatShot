@@ -117,7 +117,7 @@
       displayName: 'DeepSeek',
       logo: 'deepseek-color.png',
       host: 'chat.deepseek.com',
-      responseSelector: '.ds-markdown, [class*="ds-markdown"]',
+      responseSelector: '.ds-markdown',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
         code: '.md-code-block, pre',
@@ -176,7 +176,7 @@
       displayName: 'ChatGPT',
       logo: 'openai.png',
       host: 'chatgpt.com',
-      responseSelector: '[data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] [class*="markdown"], .markdown.prose',
+      responseSelector: '[data-message-author-role="assistant"] .markdown.prose, [data-message-author-role="assistant"] .markdown',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
         code: 'pre',
@@ -197,7 +197,7 @@
       displayName: 'Gemini',
       logo: 'gemini-color.png',
       host: 'gemini.google.com',
-      responseSelector: '.markdown.markdown-main-panel, [class*="markdown-main-panel"], message-content',
+      responseSelector: '.markdown.markdown-main-panel, message-content',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr',
         code: 'pre, code-block',
@@ -246,7 +246,7 @@
       displayName: 'Qianwen',
       logo: 'qwen-color.png',
       host: 'www.qianwen.com',
-      responseSelector: '.qk-markdown, [class*="qk-markdown"]',
+      responseSelector: '.qk-markdown',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         divider: 'hr, .qk-md-hr',
         code: 'pre, .qk-md-code',
@@ -260,7 +260,7 @@
       displayName: 'ChatGLM',
       logo: 'qingyan-color.png',
       host: 'chatglm.cn',
-      responseSelector: '.answer-content-wrap, [class*="answer-content-wrap"]',
+      responseSelector: '.answer-content-wrap',
       // 结构特殊：先收集 markdown-body 与 mermaid(code-no-artifacts) 两轮
       getBlocks: (container) => {
         const blocks = [];
@@ -327,7 +327,7 @@
       displayName: 'Qwen',
       logo: 'qwen-color.png',
       host: 'chat.qwen.ai',
-      responseSelector: '.qwen-markdown, [class*="qwen-markdown"]',
+      responseSelector: '.qwen-markdown',
       getBlocks: (container) => configDrivenGetBlocks(container, {
         skip: '.qwen-markdown-space',
         divider: 'hr, .qwen-markdown-hr',

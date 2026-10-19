@@ -19,9 +19,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     const done = () => clearTimeout(timer);
 
-    // Security: credentials MUST be 'omit' to prevent SSRF / credential leakage
-    // when fetching arbitrary external image URLs inside AI responses.
-    fetch(msg.url, { signal: controller.signal, credentials: 'omit', mode: 'cors' })
+    // credentials 'include' is intentional, not an oversight: chat pages embed
+    // user-uploaded images on authenticated CDNs, and without cookies those
+    // fetches 401/403 so the screenshot loses the image. Scope is limited by
+    // the http/https whitelist above; URLs come from content scripts only.
+    fetch(msg.url, { signal: controller.signal, credentials: 'include' })
       .then(resp => {
         done();
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
