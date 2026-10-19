@@ -27,13 +27,15 @@
    *   table:   'selector'  独立表格块
    *   skip:    'selector'  直接跳过（如空白占位）
    * }
+   * @param {HTMLElement[]} [elementsOverride] - 可选：跳过 container.children，
+   * 直接用给定的扁平元素序列（见 chatgpt 的包装层扁平化）。
    * @returns {Array<{type: string, elements: HTMLElement[]}>}
    */
-  function configDrivenGetBlocks(container, cfg) {
+  function configDrivenGetBlocks(container, cfg, elementsOverride) {
     const blocks = [];
     let currentBlock = null;
 
-    for (const child of Array.from(container.children)) {
+    for (const child of elementsOverride || Array.from(container.children)) {
       if (cfg.skip && child.matches(cfg.skip)) continue;
 
       const isDivider = !!cfg.divider && (child.matches(cfg.divider) || !!child.querySelector(cfg.divider));
@@ -197,20 +199,25 @@
       host: 'chatgpt.com',
       responseSelector: '[class*="MarkdownRoot"]',
       filterResponse: (el) => !el.closest('[class*="user-message"]'),
-      // 助手正文外常有一层单子元素的匿名 DIV 包装，直接切块会塌缩成 1 块；
-      // 穿透包装层直到出现真正的多块结构。
+      // 助手正文外有单子元素匿名包装层（穿透），且段落流可能整段包在嵌套
+      // DIV 里（扁平化）——两种处理都只认语义块标签，避免塌缩成 1-2 大块。
       getBlocks: (container) => {
+        const BLOCKS = 'h1,h2,h3,h4,p,ul,ol,pre,table,hr';
         let inner = container;
         while (inner.children.length === 1 &&
-               inner.children[0].querySelector('h1,h2,h3,h4,p,ul,ol,pre,table,hr')) {
+               inner.children[0].querySelector(BLOCKS)) {
           inner = inner.children[0];
         }
+        const flatten = (node) => Array.from(node.children).flatMap(k =>
+          k.matches(BLOCKS) ? [k]
+            : k.querySelector(BLOCKS) ? flatten(k)
+              : [k]);
         return configDrivenGetBlocks(inner, {
           divider: 'hr',
           code: 'pre',
           table: 'table',
           section: 'h2, h3, h4'
-        });
+        }, flatten(inner));
       },
       getResponseTitle: defaultGetResponseTitle
     },

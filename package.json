@@ -1,6 +1,6 @@
 {
   "name": "chatshot",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "description": "Capture AI chat responses as beautiful screenshots and stitch them for easy sharing",
   "type": "module",
   "scripts": {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatShot",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "description": "Capture AI chat responses as screenshots and stitch them for easy sharing",
   "permissions": ["activeTab", "clipboardWrite"],
   "host_permissions": ["https://*/*"],
@@ -27,6 +27,7 @@
       "matches": [
         "https://chat.deepseek.com/*",
         "https://notebooklm.google.com/*",
+        "https://notebook.google.com/*",
         "https://chatgpt.com/*",
         "https://gemini.google.com/*",
         "https://www.doubao.com/*",
@@ -47,6 +48,7 @@
       "matches": [
         "https://chat.deepseek.com/*",
         "https://notebooklm.google.com/*",
+        "https://notebook.google.com/*",
         "https://chatgpt.com/*",
         "https://gemini.google.com/*",
         "https://www.doubao.com/*",

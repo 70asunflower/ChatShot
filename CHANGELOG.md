@@ -2,6 +2,17 @@
 
 本文件是多个 AI 会话/人协作改这个仓库时的唯一变更台账。**约定：每次改版本号，必须在这里加一节**；提交信息用语义化前缀（feat/fix/refactor）。
 
+## 1.5.5 — 2026-10-19（端到端验证补充）
+
+### Fixed
+- **notebooklm**：站点会把 `notebooklm.google.com` 重定向到 **`notebook.google.com`**（无 lm），manifest 未匹配导致内容脚本根本不注入。两个域都加入 content_scripts 与 web_accessible_resources（真机 E2E 发现）。
+
+### Changed
+- **chatgpt**：切块粒度优化（真机验证）——正文段落流整段包在嵌套 DIV 里，穿透后仍只有 1-2 个大块；configDrivenGetBlocks 新增可选 `elementsOverride` 参数，chatgpt 先把纯包装 DIV 递归扁平化为语义块序列再切块。真机效果：正文回复 2 块 → 4-9 块（章节/代码/表格独立可选）；LaTeX 源码查看器类回复保持 1 整块（其内容本就无 markdown 块元素）。
+
+### 端到端验证（真机点 Select 数块）
+deepseek 23/23 ✅ · qwen 4/4 ✅ · doubao 10/10 ✅ · claude 3/3 ✅ · qianwen 165/165 ✅ · gemini 30/30 ✅ · chatgpt 管线模拟 ✅（UI 点击因页面主线程繁忙超时，粒度修复后需 reload 复测）· notebooklm 需本版修复域名后复测
+
 ## 1.5.4 — 2026-10-19（逐站真机核对）
 
 逐站打开真实会话页核对适配器（qwen/kimi/doubao/chatglm/qianwen/chatgpt/gemini/claude/copilot/notebooklm）。**三个站点前端已改版、旧适配器完全失效**，全部按真机 DOM 重写；每处改动补进冒烟测试固定件。

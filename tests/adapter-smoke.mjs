@@ -171,13 +171,16 @@ const FIXTURES = [
     name: 'chatgpt',
     minBlocks: 3, needTypes: ['code', 'table'],
     build() {
-      // 2026-10 新版结构：MarkdownRoot-<hash> 根 + 单子元素匿名包装层；
-      // 用户消息发 markdown 时也有 mdRoot，需 filterResponse 排除。
+      // 2026-10 新版结构：MarkdownRoot-<hash> 根 + 单子元素匿名包装层，
+      // 段落流还套在嵌套 DIV 里（flatten 需展开）；用户消息发 markdown 时
+      // 也有 mdRoot，需 filterResponse 排除。
       const blocks = el('div', 'my-4').add(
         el('div', 'stream-content').add(
-          el('h2', '', {}).add('T'),
-          el('p', '', {}).add('a'),
-          el('p', '', {}).add('b'),
+          el('div', 'prose-wrap').add(
+            el('h2', '', {}).add('T'),
+            el('p', '', {}).add('a'),
+            el('p', '', {}).add('b')
+          ),
           codePre(),
           table()
         )
