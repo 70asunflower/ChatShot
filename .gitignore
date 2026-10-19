@@ -13,5 +13,7 @@ Thumbs.db
 *.log
 *.tmp
 .gstack/
-# Test profiles / local test artifacts 
-.chrome-test-profile/ 
+# Test profiles / local test artifacts
+.chrome-test-profile/
+# Store build artifacts
+dist/
